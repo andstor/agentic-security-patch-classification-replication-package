@@ -53,7 +53,7 @@ def main():
     
     grouped_dataset = {}
     for cve_id, cve in tqdm(dataset.items(), desc="Grouping dataset"):
-        commit_url = cve["ground_truth"]["commits"][0] # only first commit for now
+        commit_url = cve["ground_truth"]["commit"][0] # only first commit for now
         github_url = extract_github_repo(commit_url)
         if github_url:
             owner, repo = github_url
@@ -102,25 +102,33 @@ def main():
                         for cve_id in grouped_dataset[repo_ident]:
                             cve = dataset[cve_id]
                             # save patch
-                            commit_url = cve["ground_truth"]["commits"][0]
-                            patch_ref = extract_commit_hash(commit_url)
-                            commit = repo.commit(patch_ref) # b2ab395adba5d85f7d20ec25ac815add26c1296c
-                            patch_commits.append(commit)
-                            diff = commit.repo.git.show(commit.hexsha)
                             
-                            #cve,owner,repo,commit_id,label,desc_token,msg_token,diff_token
-                            data = {
-                                "commit_id": commit.hexsha,
-                                "owner": repo_owner,
-                                "repo": repo_name,
-                                "commit_message": commit.message,
-                                "diff": diff,
-                            }
-                            
-                            f.write(json.dumps(data))
-                            f.write("\n")
-                            stats["commits"] += 1
-                            pbar.set_postfix(stats)
+                            for commit_url in cve["ground_truth"]["commit"]:
+                                patch_ref = extract_commit_hash(commit_url)
+                                pbar.set_description(f"Processing {cve_id} ({commit_url})")
+                                if patch_ref is None:
+                                    continue
+                                try:
+                                    commit = repo.commit(patch_ref) # b2ab395adba5d85f7d20ec25ac815add26c1296c
+                                except ValueError as e:
+                                    continue
+                                    
+                                patch_commits.append(commit)
+                                diff = commit.repo.git.show(commit.hexsha)
+                                
+                                #cve,owner,repo,commit_id,label,desc_token,msg_token,diff_token
+                                data = {
+                                    "commit_id": commit.hexsha,
+                                    "owner": repo_owner,
+                                    "repo": repo_name,
+                                    "commit_message": commit.message,
+                                    "diff": diff,
+                                }
+                                
+                                f.write(json.dumps(data))
+                                f.write("\n")
+                                stats["commits"] += 1
+                                pbar.set_postfix(stats)
                 
                 
                 
@@ -137,7 +145,7 @@ def main():
                             if commit in patch_commits:
                                 continue
                             
-                            diff = commit.repo.git.show(commit.hexsha)
+                            diff = commit.repo.git.show(commit.hexsha) # Non-plumbing commands in git output in utf-8.
                             data = {
                                 "commit_id": commit.hexsha,
                                 "owner": repo_owner,
