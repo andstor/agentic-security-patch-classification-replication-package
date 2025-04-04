@@ -39,6 +39,7 @@ def git_clone_worker(repo_ident):
         return repo_path
     
     except Exception as e:
+        print(f"Error cloning {repo_ident}: {e}")
         return repo_path
 
 def constrained_iterator(sem: threading.BoundedSemaphore, data: iter):
@@ -122,6 +123,7 @@ def main_worker(mainq: Queue, writeq: Queue):
                         pbar.update(1)
             
             except Exception:
+                print(f"Error processing {repo_path}: {e}")
                 continue
             
             finally:
@@ -193,7 +195,8 @@ def main():
                     cves = take_named_entries(dataset, cve_ids)
                     mainq.put((repo_path, cves)) # Process the cves
                 
-                except Exception:
+                except Exception as e:
+                    print(f"Error main processing {repo_path}: {e}")
                     continue
                 
                 finally:
