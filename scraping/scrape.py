@@ -1,6 +1,6 @@
 import multiprocessing as mp
 import queue
-from multiprocessing import Queue, Process
+from multiprocessing import Queue, Process, BoundedSemaphore
 
 import random
 import time
@@ -19,8 +19,11 @@ from pathlib import Path
 LOCAL_DIR = "./.tmp"
 OUTPUT_DIR = "./output"
 
-JOBS = 4
-NUM_PROC = 4
+JOBS = 10
+CONCURRENT_DOWNLOADS = 10
+
+RETAINED_REPOS = 10
+RETAINED_REPOS = max(CONCURRENT_DOWNLOADS, RETAINED_REPOS)
 
 
 def git_clone_worker(repo_ident):
@@ -39,7 +42,6 @@ def git_clone_worker(repo_ident):
         return repo_path
     
     except Exception as e:
-        print(f"Error cloning {repo_ident}: {e}")
         return repo_path
 
 def constrained_iterator(sem: threading.BoundedSemaphore, data: iter):
@@ -61,7 +63,7 @@ def jsonl_writer_worker(q: Queue):
         except queue.Empty:
             continue
 
-def main_worker(mainq: Queue, writeq: Queue):
+def main_worker(mainq: Queue, writeq: Queue, sem: BoundedSemaphore): # type: ignore
     pos = mp.current_process()._identity[0]
     
     while True:
@@ -75,7 +77,7 @@ def main_worker(mainq: Queue, writeq: Queue):
                 repo = Repo(repo_path)
                 repo_owner, repo_name = repo_path.parts[-1].split(":")
                 
-                with tqdm(position=pos, leave=False, desc="Extracting commits", dynamic_ncols=True) as pbar:
+                with tqdm(position=pos, leave=False, desc=f"Extracting commits from {repo_owner}/{repo_name}", dynamic_ncols=True) as pbar:
                     patch_commits = []
                     for cve_id, cve in cves.items():
                         for commit_url in cve["ground_truth"]["commit"]:
@@ -123,7 +125,6 @@ def main_worker(mainq: Queue, writeq: Queue):
                         pbar.update(1)
             
             except Exception:
-                print(f"Error processing {repo_path}: {e}")
                 continue
             
             finally:
@@ -132,8 +133,9 @@ def main_worker(mainq: Queue, writeq: Queue):
                     if os.path.exists(repo_path):
                         shutil.rmtree(repo_path, ignore_errors=True)
                 except BaseException as e:
-                    print(f"Error removing {repo_path}: {e}")
                     pass
+                finally:
+                    sem.release()
         except queue.Empty:
             continue
 
@@ -159,30 +161,28 @@ def main():
     jsonl_writer.start()
     
     
-    mainq = Queue()
+    sem = mp.BoundedSemaphore(RETAINED_REPOS)
+
+    mainq = Queue() # commits data
     main_workers = [
-        Process(target=main_worker, args=(mainq, writeq), daemon=True)
+        Process(target=main_worker, args=(mainq, writeq, sem), daemon=True)
         for _ in range(JOBS)
     ]
     for p in main_workers:
         p.start()
 
     
-    sem = threading.BoundedSemaphore(NUM_PROC)
-    
-    with mp.Pool(processes=NUM_PROC) as pool:
+    with mp.Pool(processes=CONCURRENT_DOWNLOADS) as pool:
         repos = grouped_dataset.keys()
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         
         with tqdm(total=len(grouped_dataset), position=0, desc="Scraping repositories", dynamic_ncols=True) as pbar:
             for repo_path in pool.imap_unordered(git_clone_worker, constrained_iterator(sem, repos)):
-                sem.release()
                 
                 try:
                     repo = Repo(repo_path)
                     repo_owner, repo_name = repo_path.parts[-1].split(":")
                     repo_ident = repo_owner + "/" + repo_name
-                    #pbar.set_description(repo_ident)
                     meta = {
                         "owner": repo_owner,
                         "repo": repo_name,
@@ -209,10 +209,7 @@ def main():
         p.join()
     
     
-    
     writeq.put(None)
-    #pbarq.put(None)
-    #pbar_thread.join()
     jsonl_writer.join()
 
 if __name__ == "__main__":
