@@ -131,7 +131,8 @@ def main_worker(mainq: Queue, writeq: Queue):
                     repo_path = Path(LOCAL_DIR) / (repo_owner + ":" + repo_name)
                     if os.path.exists(repo_path):
                         shutil.rmtree(repo_path, ignore_errors=True)
-                except BaseException:
+                except BaseException as e:
+                    print(f"Error removing {repo_path}: {e}")
                     pass
         except queue.Empty:
             continue
