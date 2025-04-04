@@ -198,6 +198,7 @@ def main():
                 
                 except Exception as e:
                     print(f"Error main processing {repo_path}: {e}")
+                    sem.release()
                     continue
                 
                 finally:
