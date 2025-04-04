@@ -19,8 +19,8 @@ from pathlib import Path
 LOCAL_DIR = "./.tmp"
 OUTPUT_DIR = "./output"
 
-JOBS = 5
-NUM_PROC = 10
+JOBS = 4
+NUM_PROC = 4
 
 
 def git_clone_worker(repo_ident):
