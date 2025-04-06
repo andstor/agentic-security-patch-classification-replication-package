@@ -69,12 +69,12 @@ features = Features({
 })
 
 
-dataset_commits = Dataset.from_generator(generator=partial(jsonl_generator, "./output/commits_data.jsonl"), features=features)
+dataset_commits = Dataset.from_generator(generator=partial(jsonl_generator, "./output/commits_data.jsonl"), features=features, num_proc=20)
 new_column = [0] * len(dataset_commits)
 dataset_commits = dataset_commits.add_column("label", new_column)
 print(f"Number of non-patching commits: {len(dataset_commits)}")
 
-dataset_patches = Dataset.from_generator(generator=partial(jsonl_generator, "./output/patches_data.jsonl"), features=features)
+dataset_patches = Dataset.from_generator(generator=partial(jsonl_generator, "./output/patches_data.jsonl"), features=features, num_proc=20)
 new_column = [1] * len(dataset_patches)
 dataset_patches = dataset_patches.add_column("label", new_column)
 print(f"Number of patcing commits: {len(dataset_patches)}")
@@ -95,9 +95,9 @@ for commit in tqdm(dataset):
 train_index, test_index = split_numbers_from_dict(repos, percent_train=0.80, percent_test=0.20)
 test_index, validation_index = split_numbers_from_dict(test_index, percent_train=0.50, percent_test=0.50)
 
-train_dataset = dataset.filter(lambda x: (x["owner"] + "/" + x["repo"]) in train_index.keys(), num_proc=10)
-test_dataset = dataset.filter(lambda x: (x["owner"] + "/" + x["repo"]) in test_index.keys(), num_proc=10)
-val_dataset = dataset.filter(lambda x: (x["owner"] + "/" + x["repo"]) in validation_index.keys(), num_proc=10)
+train_dataset = dataset.filter(lambda x: (x["owner"] + "/" + x["repo"]) in train_index.keys(), num_proc=20)
+test_dataset = dataset.filter(lambda x: (x["owner"] + "/" + x["repo"]) in test_index.keys(), num_proc=20)
+val_dataset = dataset.filter(lambda x: (x["owner"] + "/" + x["repo"]) in validation_index.keys(), num_proc=20)
 
 
 ddict = DatasetDict({
