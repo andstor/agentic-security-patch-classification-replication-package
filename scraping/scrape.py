@@ -188,7 +188,7 @@ def main():
                         "repo": repo_name,
                         "head": repo.head.commit.hexsha,
                     }
-                    with open(Path(OUTPUT_DIR) / "meta.json", "a") as f:
+                    with open(Path(OUTPUT_DIR) / "meta.jsonl", "a") as f:
                         f.write(json.dumps(meta))
                         f.write("\n")
                     
