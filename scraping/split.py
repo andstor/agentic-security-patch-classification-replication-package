@@ -7,8 +7,6 @@ from tqdm import tqdm
 
 import json
 from datasets import Dataset, Features, Value
-from ftfy import fix_encoding
-from datasets import disable_caching
 from datasets import Features, Value
 from functools import partial
 
