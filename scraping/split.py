@@ -16,7 +16,6 @@ shards = [i for i in range(num_proc)]
 
 
 def jsonl_generator(file_path, num_handles=1, shards=[0]):
-    print(f"file_path: {file_path}")
     rank = shards[0]
     """Yield lines from a JSONL file as dictionaries."""
     with open(file_path, 'r', encoding='utf-8') as f:
