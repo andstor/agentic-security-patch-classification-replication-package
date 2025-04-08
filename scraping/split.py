@@ -130,7 +130,7 @@ ddict = DatasetDict({
     "validation": val_dataset_patches,
 })
 
-ddict.push_to_hub("fals3/cvevc3", config_name="patches", private=False, max_shard_size="250MB")
+ddict.push_to_hub("fals3/cvevc", config_name="patches", private=False, max_shard_size="250MB")
 
 
 
@@ -154,7 +154,7 @@ ddict = DatasetDict({
     "validation": val_dataset_non_patches,
 })
 
-ddict.push_to_hub("fals3/cvevc3", config_name="non_patches", private=False, max_shard_size="250MB")
+ddict.push_to_hub("fals3/cvevc", config_name="non_patches", private=False, max_shard_size="250MB")
 
 
 
@@ -164,6 +164,6 @@ api = HfApi()
 api.upload_file(
     path_or_fileobj="./output/meta.jsonl",
     path_in_repo="meta.jsonl",
-    repo_id="fals3/cvevc3",
+    repo_id="fals3/cvevc",
     repo_type="dataset",
 )
