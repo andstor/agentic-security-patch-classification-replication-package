@@ -14,7 +14,7 @@ we rerun the model to update the metrics.
 '''
 
 import configs
-from model.load_data import CVEDataset
+from load_data import CVEDataset
 # from load_data_colbert import CVEDataset # for baseline usage (ColBERT)
 import logging
 from torch.utils.data import DataLoader
@@ -23,8 +23,6 @@ import wandb
 
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
-gpus = [0,1,2,3]
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -45,7 +43,8 @@ Of course, you could also train the model in other ways:
 * etc.
 """
 
-from transformers import AutoModelForSeq2SeqLM, AdamW, get_linear_schedule_with_warmup
+from transformers import AutoModelForSeq2SeqLM, get_linear_schedule_with_warmup
+from torch.optim import AdamW
 import pytorch_lightning as pl
 import torch.nn as nn
 import torch
@@ -181,10 +180,7 @@ if __name__ == '__main__':
     import os
 
 
-    # wandb_logger = WandbLogger(name='train_0831', project='PatchFinder')
-    # wandb_logger = WandbLogger(name='train_1004', project='PatchFinder_ColBERT')
-    # wandb_logger = WandbLogger(name='train_1007_20epoch', project='PatchFinder_ColBERT_20epoch')
-    wandb_logger = WandbLogger(name='train_1007_512', project='PatchFinder_ColBERT')
+    wandb_logger = WandbLogger(project='PatchFinder')
     # for early stopping, see https://pytorch-lightning.readthedocs.io/en/1.0.0/early_stopping.html?highlight=early%20stopping
     early_stop_callback = EarlyStopping(
         monitor='validation_loss',
@@ -194,12 +190,8 @@ if __name__ == '__main__':
         mode='min'
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
-
-    # CHECK_POINTS_PATH = "/mnt/local/Baselines_Bugs/PatchFinder/Phase-2/output_0831/Checkpoints"
-    # CHECK_POINTS_PATH = "/mnt/local/Baselines_Bugs/PatchFinder/Phase-2/output_1004/Checkpoints"
-    # CHECK_POINTS_PATH = "/mnt/local/Baselines_Bugs/PatchFinder/Phase-2/output_1007/Checkpoints"
     
-    CHECK_POINTS_PATH = "../output/output_1007_512/Checkpoints"
+    CHECK_POINTS_PATH = "../output/Checkpoints"
 
     os.makedirs(CHECK_POINTS_PATH, exist_ok=True)
 
@@ -218,7 +210,7 @@ if __name__ == '__main__':
     trainer = Trainer(
         accelerator='gpu',                    # "cpu", "gpu", "tpu", "ipu", "hpu", "mps", "auto", "ddp"
         num_nodes=1,                          # Using 1 machine/node
-        devices=len(gpus),                            # Using 4 GPUs
+        devices=len(configs.gpus),                            # Using 4 GPUs
         default_root_dir=CHECK_POINTS_PATH,   # Default checkpoint path
         logger=wandb_logger,
         max_epochs=20,                        # Set the maximum number of epochs

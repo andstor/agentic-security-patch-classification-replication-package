@@ -11,20 +11,11 @@ Phase-2 uses the output of Phase-1 as the input data, i.e., the top-100 commits 
 
 ```bash
 .
-|-- Ablation
-|   |-- ablation_data_prepare.py
-|   |-- codellama
-|   |-- diff_only
-|   `-- msg_only
 |-- README.md
 |-- configs.py # Configuration file for fine-tuning
 |-- evaluate.py # Evaluation script
-|-- evaluate_deprecated.py # Deprecated 
 |-- load_data.py # Data loading script
-|-- load_data_colbert.py # Data loading script for ColBERT (Baseline)
-|-- load_data_deprecated.py # Deprecated
 |-- main.py # Main script for fine-tuning
-|-- main_deprecated.py # Deprecated
 |-- metrics.py # Metrics calculation script
 |-- models.py # Model design script for Phase-2
 |-- output_1007 # Fine-tuned model files*

@@ -136,7 +136,7 @@ def main():
                 .select(['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'desc_token', 'msg_token', 'diff_token', 'recall', 'precision', 'f1', 'fused_f1'])
             )
 
-            file_path = os.path.join(DATA_DIR, f'semantic_similarity_{split}.csv')
+            file_path = os.path.join(DATA_DIR, f'top100_{split}.csv')
             data.to_pandas().to_csv(file_path, mode='a', header=False, index=False)
         print(f"Data written to {file_path} for split {split}")
         

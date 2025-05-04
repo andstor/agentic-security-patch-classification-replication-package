@@ -9,27 +9,25 @@ For convenience, we reused it for baselines as well (modified the configurations
 import torch
 import os
 #os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
-#gpus = [0,1,2,3]
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-gpus = [0]
+gpus = [0,1,2,3,4,5,6,7]
 
-data_path='../../../data/samples' 
-os.makedirs(data_path,exist_ok=True)
+
+data_path='../../../data/baselines/PatchFinder'
 
 # train_filename    = 'train_data_top100.csv'
 # validate_filename = 'validate_data_top100.csv'
-test_filename     = 'sample_test_data_data.csv'
+test_filename     = 'top100_test.csv'
 
 ### 10/07
-train_filename    = 'sample_train_data.csv'
-validate_filename = 'sample_validate_data.csv'
+train_filename    = 'top100_train.csv'
+validate_filename = 'top100_validation.csv'
 
 
 
 train_file=os.path.join(data_path, train_filename)
 valid_file=os.path.join(data_path, validate_filename)
 test_file=os.path.join(data_path, test_filename)
-batch_size=128
+
 
 # save_path='/mnt/local/Baselines_Bugs/PatchFinder/output'
 # os.makedirs(save_path,exist_ok=True)
