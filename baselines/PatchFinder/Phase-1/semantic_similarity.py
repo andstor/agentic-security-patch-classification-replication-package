@@ -241,7 +241,7 @@ def main():
     for split in files_by_split.keys():
 
         # Create and write the header of the CSV file
-        empty_df = pd.DataFrame(columns=['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label'])
+        empty_df = pd.DataFrame(columns=['cve', 'owner', 'repo', 'commit_id', 'label', 'recall', 'precision', 'f1'])
         empty_df.to_csv(os.path.join(DATA_DIR, f'semantic_similarity_{split}.csv'), index=False)
             
         
