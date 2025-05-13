@@ -9,6 +9,7 @@ class CVEDataset(Dataset):
     def __init__(self, file_name):
         self.df = pd.read_csv(file_name)
         self.cve = self.df['cve']
+        self.commit_id = self.df['commit_id']
         self.desc_tokens = self.df['desc_token']
         # Combine msg and diff tokens with a space separator
         self.msg_diff_tokens = self.df['msg_token'] + " " + self.df['diff_token']
@@ -46,6 +47,7 @@ class CVEDataset(Dataset):
             'input_ids_msg_diff': msg_diff_encoding['input_ids'].flatten(),
             'attention_mask_msg_diff': msg_diff_encoding['attention_mask'].flatten(),
             'label': torch.tensor(self.labels[index], dtype=torch.float),
+            'commit_id': self.commit_id[index],
             'cve': self.cve[index]
         }
 

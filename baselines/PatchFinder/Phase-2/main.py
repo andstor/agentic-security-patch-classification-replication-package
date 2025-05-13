@@ -21,7 +21,10 @@ from torch.utils.data import DataLoader
 import os
 import wandb
 
+from torchmetrics.classification import BinaryAccuracy  # Also supports multi-GPU
+from torchmetrics.classification import BinaryF1Score  # Optional
 
+import torch
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -43,102 +46,8 @@ Of course, you could also train the model in other ways:
 * etc.
 """
 
-from transformers import AutoModelForSeq2SeqLM, get_linear_schedule_with_warmup
-from torch.optim import AdamW
-import pytorch_lightning as pl
-import torch.nn as nn
-import torch
+from model import CVEClassifier
 
-class CVEClassifier(pl.LightningModule):
-    def __init__(self, 
-                 num_classes=1,
-                 dropout=0.1,
-                 lr=5e-5,
-                 num_train_epochs=20,
-                 warmup_steps=1000,
-                 ):
-        
-        super().__init__()
-        self.codeReviewer = AutoModelForSeq2SeqLM.from_pretrained(
-            "microsoft/codereviewer").encoder
-        
-        self.save_hyperparameters()
-        self.dropout = dropout
-        self.criterion = nn.BCEWithLogitsLoss()
-
-        # Dropout layer
-        self.dropout_layer = nn.Dropout(self.dropout)
-        # Fully connected layer for output
-        self.fc = nn.Linear(2 * self.codeReviewer.config.hidden_size, num_classes)
-
-    def forward(self, input_ids_desc, attention_mask_desc, input_ids_msg_diff, attention_mask_msg_diff):
-        
-        # Get [CLS] embeddings for desc and msg+diff
-        desc_cls_embed = self.codeReviewer(input_ids=input_ids_desc, attention_mask=attention_mask_desc).last_hidden_state[:, 0, :]
-        msg_diff_cls_embed = self.codeReviewer(input_ids=input_ids_msg_diff, attention_mask=attention_mask_msg_diff).last_hidden_state[:, 0, :]
-        
-        # Concatenate [CLS] embeddings
-        concatenated = torch.cat((desc_cls_embed, msg_diff_cls_embed), dim=1)
-        
-        # Apply dropout
-        dropped = self.dropout_layer(concatenated)
-        
-        # Pass through the fully connected layer
-        output = self.fc(dropped)
-        
-        return output
-    
-    def common_step(self, batch):
-        predict = self(
-            batch['input_ids_desc'],
-            batch['attention_mask_desc'],
-            batch['input_ids_msg_diff'],  # Updated to msg_diff
-            batch['attention_mask_msg_diff']  # Updated to msg_diff
-        )
-        predict = predict.squeeze(1)
-        loss = self.criterion(predict, batch['label'])
-        return loss
-
-    def training_step(self, batch, dataloader_idx=None):
-        loss = self.common_step(batch)
-        # logs metrics for each training_step,
-        # and the average across the epoch
-        self.log("training_loss", loss)
-        return loss
-
-    def validation_step(self, batch, batch_idx, dataloader_idx=None):
-        loss = self.common_step(batch)
-        self.log("validation_loss", loss, on_epoch=True, prog_bar=True, sync_dist=True)
-
-        return loss
-
-    def test_step(self, batch, batch_idx, dataloader_idx=None):
-        loss = self.common_step(batch)
-
-        return loss
-
-    def configure_optimizers(self):
-        # create optimizer
-        optimizer = AdamW(self.parameters(), lr=self.hparams.lr)
-        # create learning rate scheduler
-        num_train_optimization_steps = self.hparams.num_train_epochs * len(train_dataloader)
-        lr_scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=self.hparams.warmup_steps,
-                                                    num_training_steps=num_train_optimization_steps),
-                        'name': 'learning_rate',
-                        'interval':'step',
-                        'frequency': 1}
-
-        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}
-
-    def train_dataloader(self):
-        return train_dataloader
-
-    def val_dataloader(self):
-        return valid_dataloader
-
-    def test_dataloader(self):
-        return test_dataloader
 
 """Let's start up Weights and Biases!"""
 if __name__ == '__main__':
@@ -191,7 +100,7 @@ if __name__ == '__main__':
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     
-    CHECK_POINTS_PATH = "../output/Checkpoints"
+    CHECK_POINTS_PATH = "../output/all/Checkpoints"
 
     os.makedirs(CHECK_POINTS_PATH, exist_ok=True)
 
@@ -216,7 +125,7 @@ if __name__ == '__main__':
         max_epochs=20,                        # Set the maximum number of epochs
         accumulate_grad_batches=1,           # Gradient accumulation steps
         max_steps=100000,                     # Set the maximum number of training steps
-        log_every_n_steps=100,               # Log every 100 steps
+        log_every_n_steps=10,                # Log every 100 steps
         precision=32,                        # Using 32-bit precision for training; this is the default and can be omitted if desired
         gradient_clip_val=0.0,               # Assuming you don't want gradient clipping, but adjust if needed
         callbacks=[early_stop_callback, lr_monitor, checkpoint_callback],
