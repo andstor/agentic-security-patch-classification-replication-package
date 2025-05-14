@@ -96,12 +96,21 @@ def main():
             .with_columns([
                 (-pl.col("fused_f1")).rank(method="ordinal").over("cve").alias("rank")  # rank 1 = best
             ])
-            .filter(pl.col("rank") <= 100)  # Top 100 per CVE
+            
             .sort(["cve", "fused_f1"], descending=[False, False])
+        )
+
+        # Save data for metrics
+        ranked_df.select(['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'recall', 'precision', 'f1', 'fused_f1', 'rank']).to_pandas().to_csv(os.path.join(DATA_DIR, f'hybrid_similarity_{split}.csv'))
+
+        
+        ranked_top100_df = (
+            fused_df
+            .filter(pl.col("rank") <= 100)  # Top 100 per CVE
         )
         
         hit_at_100 = (
-            ranked_df
+            ranked_top100_df
             .filter(pl.col("label") == 1)
             .select(pl.col("cve"))
             .unique()
@@ -124,7 +133,7 @@ def main():
         cve_df = pl.scan_parquet(cve_path)
         patches_df = pl.scan_parquet(patches_path)
 
-        for cve, df in  tqdm(ranked_df.group_by("cve"), desc="Processing CVE groups", total=ranked_df.select(pl.col("cve")).unique().height, dynamic_ncols=True):
+        for cve, df in  tqdm(ranked_top100_df.group_by("cve"), desc="Processing CVE groups", total=ranked_top100_df.select(pl.col("cve")).unique().height, dynamic_ncols=True):
             owner_repo_name = df[0]['owner'].item() + "_" + df[0]['repo'].item() # File name key
             nonpatches_df = pl.scan_parquet(os.path.join(nonpatches_path, f"{owner_repo_name}.parquet"))
             commits_df = pl.concat([patches_df, nonpatches_df], how="vertical")

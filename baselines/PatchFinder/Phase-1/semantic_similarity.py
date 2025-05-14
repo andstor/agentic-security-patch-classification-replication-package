@@ -221,7 +221,7 @@ def main():
 
     # %%
 
-    PROCESSING_JOBS = 8
+    PROCESSING_JOBS = 8 # Num GPUs
     device_ids = list(range(PROCESSING_JOBS))
 
     similarity_workers = []
