@@ -36,7 +36,7 @@ def grid_search(df):
             scored_df
             .sort(["cve", "fused_f1"], descending=[False, True])
             .with_columns([
-                pl.col("fused_f1").rank("dense").over("cve").alias("rank")  # rank 1 = best
+                pl.col("fused_f1").rank("ordinal").over("cve").alias("rank")  # rank 1 = best
             ])
             .filter(pl.col("rank") <= 100)  # Top 100 per CVE
         )
@@ -71,11 +71,10 @@ def grid_search(df):
 def main():
     
     
-    best_lambda = 1# grid_search(df)
+    λ = 1# grid_search(df)
 
 
-# read file
-    split = 'train'
+    # read file
     
     for split in tqdm(['train', 'test', 'validation'], desc="Processing splits", dynamic_ncols=True):
         
@@ -88,20 +87,19 @@ def main():
             how='inner',
         )
 
-        λ = best_lambda
         fused_df = merged_df.with_columns(
             (pl.col('similarity') + (λ * pl.col('f1'))).alias('fused_f1'),
         )
 
         ranked_df = (
             fused_df
-            .sort(["cve", "fused_f1"], descending=[False, True])
             .with_columns([
-                pl.col("fused_f1").rank("dense").over("cve").alias("rank")  # rank 1 = best
+                (-pl.col("fused_f1")).rank(method="ordinal").over("cve").alias("rank")  # rank 1 = best
             ])
-            .filter(pl.col("rank") <= 100)  # Top 10 per CVE
+            .filter(pl.col("rank") <= 100)  # Top 100 per CVE
+            .sort(["cve", "fused_f1"], descending=[False, False])
         )
-
+        
         hit_at_100 = (
             ranked_df
             .filter(pl.col("label") == 1)
@@ -110,13 +108,13 @@ def main():
             .height
         )
         
-        print(f"Hit@100: {hit_at_100} / {merged_df.select(pl.col('cve')).unique().height}")
+        print(f"Hit@100: {hit_at_100} / {merged_df.select(pl.col('cve')).unique().height} = {hit_at_100 / merged_df.select(pl.col('cve')).unique().height:.4f}")
 
 
         # Create and write the header of the CSV file
 
         empty_df = pd.DataFrame(columns=['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'desc_token', 'msg_token', 'diff_token', 'recall', 'precision', 'f1', 'fused_f1'])
-        empty_df.to_csv(os.path.join(DATA_DIR, f'top_100_fusion_{split}.csv'), index=False)
+        empty_df.to_csv(os.path.join(DATA_DIR, f'top100_{split}.csv'), index=False)
 
 
         cve_path = f"tmp/tokenized/cve_{split}.parquet"
@@ -127,17 +125,18 @@ def main():
         patches_df = pl.scan_parquet(patches_path)
 
         for cve, df in  tqdm(ranked_df.group_by("cve"), desc="Processing CVE groups", total=ranked_df.select(pl.col("cve")).unique().height, dynamic_ncols=True):
-            owner_repo_name = ranked_df[0]['owner'].item() + "_" + ranked_df[0]['repo'].item() # File name key
-            nonpatches_df = pl.scan_parquet(os.path.join(nonpatches_path, f"{owner_repo_name}.parquet")).collect()
+            owner_repo_name = df[0]['owner'].item() + "_" + df[0]['repo'].item() # File name key
+            nonpatches_df = pl.scan_parquet(os.path.join(nonpatches_path, f"{owner_repo_name}.parquet"))
             commits_df = pl.concat([patches_df, nonpatches_df], how="vertical")
             data = (
-                df
+                df.lazy()
+                .join(cve_df, on=['cve'], how='left')
                 .join(commits_df, on=['commit_id'], how='left')
                 .select(['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'desc_token', 'msg_token', 'diff_token', 'recall', 'precision', 'f1', 'fused_f1'])
             )
 
             file_path = os.path.join(DATA_DIR, f'top100_{split}.csv')
-            data.to_pandas().to_csv(file_path, mode='a', header=False, index=False)
+            data.collect().to_pandas().to_csv(file_path, mode='a', header=False, index=False)
         print(f"Data written to {file_path} for split {split}")
         
 

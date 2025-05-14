@@ -205,7 +205,7 @@ def main():
     # %%
 
 
-    LOADING_JOBS = 1 # MAX amount of files in memory
+    LOADING_JOBS = 4 # MAX amount of files in memory
     MAX_CVES = 50
 
     sem = mp_context.BoundedSemaphore(MAX_CVES) # the peak number of processed groups.
@@ -221,7 +221,7 @@ def main():
 
     # %%
 
-    PROCESSING_JOBS = 4
+    PROCESSING_JOBS = 8
     device_ids = list(range(PROCESSING_JOBS))
 
     similarity_workers = []
