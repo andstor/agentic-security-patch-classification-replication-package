@@ -14,7 +14,7 @@ from model import CVEClassifier  # Adjust import path if needed
 # --- Configuration ---
 data_path = '../../../data/baselines/PatchFinder'
 input_csv_filename = "top100_test.csv"  # Name of your input CSV file
-output_csv_filename = "predictions_test.csv" # Name for the output CSV file
+output_csv_filename = "predictions_top100_test.csv" # Name for the output CSV file
 batch_size = 32
 num_workers = 4
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") # Explicitly set primary CUDA device
