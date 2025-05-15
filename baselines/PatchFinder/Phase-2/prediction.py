@@ -13,7 +13,7 @@ from model import CVEClassifier  # Adjust import path if needed
 
 # --- Configuration ---
 data_path = '../../../data/baselines/PatchFinder'
-input_csv_filename = "hybrid_similarity_test.csv"  # Name of your input CSV file
+input_csv_filename = "top100_test.csv"  # Name of your input CSV file
 output_csv_filename = "predictions_test.csv" # Name for the output CSV file
 batch_size = 32
 num_workers = 4
