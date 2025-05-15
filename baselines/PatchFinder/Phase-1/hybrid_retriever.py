@@ -105,7 +105,7 @@ def main():
 
         
         ranked_top100_df = (
-            fused_df
+            ranked_df
             .filter(pl.col("rank") <= 100)  # Top 100 per CVE
         )
         
