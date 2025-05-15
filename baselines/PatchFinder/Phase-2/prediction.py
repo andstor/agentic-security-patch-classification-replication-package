@@ -13,8 +13,8 @@ from model import CVEClassifier  # Adjust import path if needed
 
 # --- Configuration ---
 data_path = '../../../data/baselines/PatchFinder'
-input_csv_filename = "top100_test.csv"  # Name of your input CSV file
-output_csv_filename = "predictions_top100_test.csv" # Name for the output CSV file
+input_csv_filename = "hybrid_similarity_test.csv"  # Name of your input CSV file
+output_csv_filename = "predictions_test.csv" # Name for the output CSV file
 batch_size = 32
 num_workers = 4
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") # Explicitly set primary CUDA device
@@ -33,7 +33,7 @@ def main():
 
     # --- Load the trained model and move parameters to the primary device ---
     try:
-        model = torch.load("../output/all/Checkpoints/final_model.pt", weights_only=False) # Load to the specified device
+        model = torch.load("./output/all/Checkpoints/final_model.pt", weights_only=False) # Load to the specified device
         #model = CVEClassifier.load_from_checkpoint("../output/all/Checkpoints/final_model.ckpt", map_location=device) # If using checkpoint
     except FileNotFoundError:
         print("Error: Trained model file not found. Please check the path.")
@@ -49,7 +49,7 @@ def main():
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=0, shuffle=False)
 
     # --- Create an empty DataFrame for storing results ---
-    columns=['cve', 'commit_id', 'label', 'label_pred']
+    columns=['cve', 'commit_id', 'label', 'prediction']
     predictions_df = pd.DataFrame(columns=columns)
 
     # --- Inference over the entire test dataset and append to CSV with progress tracking ---
@@ -83,7 +83,7 @@ def main():
         batch_data['label'] = batch_data['label'].astype(int)
 
         batch_df = pd.DataFrame(batch_data)
-        batch_df['label_pred'] = probabilities
+        batch_df['prediction'] = probabilities
         
         # Reorder columns to match the desired output structure
 
