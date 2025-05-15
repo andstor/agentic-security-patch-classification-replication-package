@@ -21,8 +21,7 @@ from torch.utils.data import DataLoader
 import os
 import wandb
 
-from torchmetrics.classification import BinaryAccuracy  # Also supports multi-GPU
-from torchmetrics.classification import BinaryF1Score  # Optional
+
 
 import torch
 
@@ -59,12 +58,7 @@ if __name__ == '__main__':
     valid_data = CVEDataset(configs.valid_file)
     test_data = CVEDataset(configs.test_file)
 
-    train_dataloader = DataLoader(dataset=train_data, shuffle=True, batch_size=32, num_workers=15)
-    valid_dataloader = DataLoader(dataset=valid_data, batch_size=32, num_workers=15)
-    test_dataloader = DataLoader(dataset=test_data, batch_size=8, num_workers=15)
 
-    batch = next(iter(train_dataloader))
-    print(batch.keys())
 
     wandb.login()
     # 8f66cd17219a1912e8a14a65348e656c657f6c5e
@@ -78,6 +72,9 @@ if __name__ == '__main__':
 
 
     model = CVEClassifier(
+            train_dataset=train_data,
+            val_dataset=valid_data,
+            test_dataset=test_data,
             num_classes=1,   # binary classification
             dropout=0.1
         )

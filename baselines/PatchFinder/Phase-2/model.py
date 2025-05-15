@@ -5,10 +5,16 @@ from torch.optim import AdamW
 import pytorch_lightning as pl
 import torch.nn as nn
 import torch
+from torchmetrics.classification import BinaryAccuracy  # Also supports multi-GPU
+from torchmetrics.classification import BinaryF1Score  # Optional
+from torch.utils.data import DataLoader
 
 
 class CVEClassifier(pl.LightningModule):
-    def __init__(self, 
+    def __init__(self,
+                 train_dataset,
+                 val_dataset,
+                 test_dataset,
                  num_classes=1,
                  dropout=0.1,
                  lr=5e-5,
@@ -31,6 +37,12 @@ class CVEClassifier(pl.LightningModule):
         self.train_f1 = BinaryF1Score()
         self.val_f1 = BinaryF1Score()
         self.test_f1 = BinaryF1Score()
+        
+        
+        # Save datasets
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.test_dataset = test_dataset
 
         # Dropout layer
         self.dropout_layer = nn.Dropout(self.dropout)
@@ -100,24 +112,25 @@ class CVEClassifier(pl.LightningModule):
         return loss
         
     def configure_optimizers(self):
-        # create optimizer
         optimizer = AdamW(self.parameters(), lr=self.hparams.lr)
-        # create learning rate scheduler
-        num_train_optimization_steps = self.hparams.num_train_epochs * len(train_dataloader)
-        lr_scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=self.hparams.warmup_steps,
-                                                    num_training_steps=num_train_optimization_steps),
-                        'name': 'learning_rate',
-                        'interval':'step',
-                        'frequency': 1}
-
+        total_steps = self.hparams.num_train_epochs * len(self.train_dataloader())
+        lr_scheduler = {
+            'scheduler': get_linear_schedule_with_warmup(
+                optimizer,
+                num_warmup_steps=self.hparams.warmup_steps,
+                num_training_steps=total_steps
+            ),
+            'name': 'learning_rate',
+            'interval': 'step',
+            'frequency': 1
+        }
         return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}
 
     def train_dataloader(self):
-        return train_dataloader
+        return DataLoader(self.train_dataset, shuffle=True, batch_size=32, num_workers=15)
 
     def val_dataloader(self):
-        return valid_dataloader
+        return DataLoader(self.val_dataset, batch_size=32, num_workers=15)
 
     def test_dataloader(self):
-        return test_dataloader
+        return DataLoader(self.test_dataset, batch_size=8, num_workers=15)
