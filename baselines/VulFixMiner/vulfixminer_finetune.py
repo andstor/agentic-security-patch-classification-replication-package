@@ -7,14 +7,14 @@ from torch.nn import functional as F
 from torch import cuda
 from sklearn import metrics
 import numpy as np
-from transformers import AdamW
+from torch.optim import AdamW
 from transformers import get_scheduler
 from patch_entities import VulFixMinerFileDataset
 from model import VulFixMinerFineTuneClassifier
 from tqdm import tqdm
 import pandas as pd
-from utils import get_code_version
-import config
+from utils import get_code_version, extract_file_diffs
+#import config
 import argparse
 
 # dataset_name = 'sap_patch_dataset.csv'
@@ -47,7 +47,9 @@ TEST_PARAMS = {'batch_size': TEST_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
 LEARNING_RATE = 1e-5
 
 use_cuda = cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+use_mps = torch.backends.mps.is_available()
+device = torch.device("cuda:0" if use_cuda else "mps" if use_mps else "cpu")
+
 random_seed = 109
 torch.manual_seed(random_seed)
 torch.cuda.manual_seed(random_seed)
@@ -247,19 +249,76 @@ def get_tensor_flow_data(dataset_name):
     return url_to_diff, url_to_partition, url_to_label, url_to_pl
 
 
+def get_cvevc_data():
+    from datasets import load_dataset, concatenate_datasets
+
+    # Login using e.g. `huggingface-cli login` to access this dataset
+    #ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches")
+    #ds_patches = load_dataset("fals3/cvcvc_commits", "patches")
+    
+    from datasets import DatasetDict, Dataset
+    ds_patches = load_dataset("fals3/cvcvc_commits", "patches", streaming=True)
+    ddict = DatasetDict()
+    ddict["train"] = Dataset.from_list([x for x in ds_patches["train"].take(10)])
+    ddict["validation"] = Dataset.from_list([x for x in ds_patches["validation"].take(10)])
+    ddict["test"] = Dataset.from_list([x for x in ds_patches["test"].take(10)])
+    ds_patches = ddict
+    
+    ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches", streaming=True)
+    ddict = DatasetDict()
+    ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
+    ddict["validation"] = Dataset.from_list([x for x in ds_nonpatches["validation"].take(10)])
+    ddict["test"] = Dataset.from_list([x for x in ds_nonpatches["test"].take(10)])
+    ds_nonpatches = ddict
+    
+    ds_commits = DatasetDict()
+    for key in ds_nonpatches:
+        ds_commits[key] = concatenate_datasets([ds_nonpatches[key], ds_patches[key]])
+    
+    url_to_diff = {}
+    url_to_partition = {}
+    url_to_label = {}
+    url_to_pl = {}
+    
+    for split in ds_commits:
+        for item in tqdm(ds_commits[split]):
+            for diff in extract_file_diffs(item["diff"]).values():
+                if not diff:
+                    continue
+                commit_id = item['commit_id']
+                url = item['owner'] + "/" + item['repo'] + '/commit/' + commit_id
+                if pd.isnull(diff):   
+                    continue
+                
+                label = item['label']
+                pl = "UNKNOWN"
+                
+                if url not in url_to_diff:
+                    url_to_diff[url] = []
+            
+                url_to_diff[url].append(diff)
+                url_to_partition[url] = split
+                url_to_label[url] = label
+                url_to_pl[url] = pl
+            
+    return url_to_diff, url_to_partition, url_to_label, url_to_pl
+    
+
 def get_data(dataset_name):
 
     if dataset_name == 'sap_patch_dataset.csv':
         url_to_diff, url_to_partition, url_to_label, url_to_pl = get_sap_data(dataset_name)
+    elif dataset_name == 'fals3/cvevc_commits':
+        url_to_diff, url_to_partition, url_to_label, url_to_pl = get_cvevc_data()
     else:
         url_to_diff, url_to_partition, url_to_label, url_to_pl = get_tensor_flow_data(dataset_name) 
-
+        
     patch_train, patch_test = [], []
     label_train, label_test = [], []
     url_train, url_test = [], []
 
     print(len(url_to_diff.keys()))
-    # diff here is diff list
+    # diff here is diff list 
     for key in url_to_diff.keys():
         url = key
         diff = url_to_diff[key]
@@ -355,11 +414,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--dataset_path',
                         type=str,
-                        required=True,
+                        default="fals3/cvevc_commits",
                         help='name of dataset')
     parser.add_argument('--finetune_model_path',
                         type=str,
-                        required=True,
+                        default="output/finetuned_model.pt",
                         help='select path to save model')
 
     args = parser.parse_args()

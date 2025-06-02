@@ -6,14 +6,11 @@ from torch.nn import functional as F
 from torch import cuda
 from sklearn import metrics
 import numpy as np
-from transformers import AdamW
+from torch.optim import AdamW
 from transformers import get_scheduler
 from patch_entities import VulFixMinerDataset
 from model import VulFixMinerClassifier, VulFixMinerFineTuneClassifier
-import pandas as pd
 from tqdm import tqdm
-import utils
-import config
 import argparse
 import vulfixminer_finetune
 from transformers import RobertaTokenizer, RobertaModel
@@ -48,7 +45,9 @@ TEST_PARAMS = {'batch_size': TEST_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
 LEARNING_RATE = 1e-5
 
 use_cuda = cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+use_mps = torch.backends.mps.is_available()
+device = torch.device("cuda:0" if use_cuda else "mps" if use_mps else "cpu")
+
 torch.backends.cudnn.benchmark = True
 
 false_cases = []
@@ -222,7 +221,12 @@ def do_train(args):
         finetune_model = nn.DataParallel(finetune_model)
 
     finetune_model.load_state_dict(torch.load(FINETUNE_MODEL_PATH))
-    code_bert = finetune_model.module.code_bert
+    
+    if hasattr(finetune_model, "module"):
+        code_bert = finetune_model.module.code_bert
+    else:
+        code_bert = finetune_model.code_bert
+        
     code_bert.eval()
     code_bert.to(device)
 
@@ -294,26 +298,26 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--dataset_path',
                         type=str,
-                        required=True,
+                        default="fals3/cvevc_commits",
                         help='name of dataset')
     parser.add_argument('--model_path',
                         type=str,
-                        required=True,
+                        default="output/trained_model.pt",
                         help='save train model to path')
 
     parser.add_argument('--finetune_model_path',
                         type=str,
-                        required=True,
+                        default="output/finetuned_model.pt",
                         help='path to finetune file transfomer')
 
     parser.add_argument('--train_prob_path',
                         type=str,
-                        required=True,
+                        default="output/train_prob.csv",
                         help='')
 
     parser.add_argument('--test_prob_path',
                         type=str,
-                        required=True,
+                        default="output/test_prob.csv",
                         help='')
    
     args = parser.parse_args()
