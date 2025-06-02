@@ -250,26 +250,26 @@ def get_tensor_flow_data(dataset_name):
 
 
 def get_cvevc_data():
-    from datasets import load_dataset, concatenate_datasets
+    from datasets import load_dataset, concatenate_datasets, DatasetDict
 
     # Login using e.g. `huggingface-cli login` to access this dataset
-    #ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches")
-    #ds_patches = load_dataset("fals3/cvcvc_commits", "patches")
+    ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches")
+    ds_patches = load_dataset("fals3/cvcvc_commits", "patches")
     
-    from datasets import DatasetDict, Dataset
-    ds_patches = load_dataset("fals3/cvcvc_commits", "patches", streaming=True)
-    ddict = DatasetDict()
-    ddict["train"] = Dataset.from_list([x for x in ds_patches["train"].take(10)])
-    ddict["validation"] = Dataset.from_list([x for x in ds_patches["validation"].take(10)])
-    ddict["test"] = Dataset.from_list([x for x in ds_patches["test"].take(10)])
-    ds_patches = ddict
-    
-    ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches", streaming=True)
-    ddict = DatasetDict()
-    ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
-    ddict["validation"] = Dataset.from_list([x for x in ds_nonpatches["validation"].take(10)])
-    ddict["test"] = Dataset.from_list([x for x in ds_nonpatches["test"].take(10)])
-    ds_nonpatches = ddict
+    #from datasets import DatasetDict, Dataset
+    #ds_patches = load_dataset("fals3/cvcvc_commits", "patches", streaming=True)
+    #ddict = DatasetDict()
+    #ddict["train"] = Dataset.from_list([x for x in ds_patches["train"].take(10)])
+    #ddict["validation"] = Dataset.from_list([x for x in ds_patches["validation"].take(10)])
+    #ddict["test"] = Dataset.from_list([x for x in ds_patches["test"].take(10)])
+    #ds_patches = ddict
+    #
+    #ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches", streaming=True)
+    #ddict = DatasetDict()
+    #ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
+    #ddict["validation"] = Dataset.from_list([x for x in ds_nonpatches["validation"].take(10)])
+    #ddict["test"] = Dataset.from_list([x for x in ds_nonpatches["test"].take(10)])
+    #ds_nonpatches = ddict
     
     ds_commits = DatasetDict()
     for key in ds_nonpatches:
