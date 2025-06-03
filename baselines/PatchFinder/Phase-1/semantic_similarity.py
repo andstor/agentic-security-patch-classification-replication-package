@@ -77,7 +77,7 @@ def progress_tracker_worker(progressq: Queue):
     #    count = pl.scan_parquet(cve_path).collect().shape[0]
     #    total += count
     
-    pbar = tqdm(desc="Processed CVE groups", total=11943, dynamic_ncols=True)
+    pbar = tqdm(desc="Processed CVE groups", total=11658, dynamic_ncols=True)
     while True:
         item = progressq.get()
         if item is None:

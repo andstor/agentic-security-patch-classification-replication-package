@@ -101,7 +101,7 @@ def main():
         )
 
         # Save data for metrics
-        ranked_df.select(['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'recall', 'precision', 'f1', 'fused_f1', 'rank']).to_pandas().to_csv(os.path.join(DATA_DIR, f'hybrid_similarity_{split}.csv'))
+        ranked_df.select(['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'recall', 'precision', 'f1', 'fused_f1']).to_pandas().to_csv(os.path.join(DATA_DIR, f'hybrid_similarity_{split}.csv'))
 
         
         ranked_top100_df = (
