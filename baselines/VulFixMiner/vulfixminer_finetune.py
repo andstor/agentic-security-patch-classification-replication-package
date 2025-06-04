@@ -191,7 +191,7 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
 
 
 def load_data():
-    ds_patches = load_dataset("fals3/cvcvc_commits", "patches", streaming=True)
+    ds_patches = load_dataset("fals3/cvcvc_commits", "patches")
     #ddict = DatasetDict()
     #ddict["train"] = Dataset.from_list([x for x in ds_patches["train"].take(10)])
     #ddict["validation"] = Dataset.from_list([x for x in ds_patches["validation"].take(10)])
@@ -199,7 +199,7 @@ def load_data():
     #ds_patches = ddict
     ds_patches = ds_patches.filter(lambda x: len(x['diff']) <= 45510, batched=False, num_proc=10)
     
-    ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches", streaming=True)
+    ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches")
     #ddict = DatasetDict()
     #ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
     #ddict["validation"] = Dataset.from_list([x for x in ds_nonpatches["validation"].take(10)])
