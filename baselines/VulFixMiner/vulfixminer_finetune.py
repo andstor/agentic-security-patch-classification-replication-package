@@ -33,8 +33,8 @@ model_folder_path = os.path.join(directory, 'model')
 
 
 NUMBER_OF_EPOCHS = 15
-TRAIN_BATCH_SIZE = 8
-TEST_BATCH_SIZE = 32
+TRAIN_BATCH_SIZE = 64#8
+TEST_BATCH_SIZE = 64#32
 EARLY_STOPPING_ROUND = 5
 
 TRAIN_PARAMS = {'batch_size': TRAIN_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
