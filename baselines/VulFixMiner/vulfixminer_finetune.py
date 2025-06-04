@@ -201,7 +201,7 @@ def load_data():
     ds_patches = ds_patches.filter(lambda x: len(x['diff']) <= 45510, batched=False, num_proc=10, desc="Filter out binary files")
     
     ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches")
-    ds_patches.pop("validation")  # Remove validation split if it exists, as we will use train/test splits only
+    ds_nonpatches.pop("validation")  # Remove validation split if it exists, as we will use train/test splits only
     #ddict = DatasetDict()
     #ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
     #ddict["validation"] = Dataset.from_list([x for x in ds_nonpatches["validation"].take(10)])
