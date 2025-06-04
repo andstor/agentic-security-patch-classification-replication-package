@@ -15,6 +15,7 @@ import argparse
 import vulfixminer_finetune
 from transformers import RobertaTokenizer, RobertaModel
 import csv 
+from utils import extract_file_diffs, get_code_version
 
 # dataset_name = 'sap_patch_dataset.csv'
 # EMBEDDINGS_DIRECTORY = '../finetuned_embeddings/variant_2'
@@ -60,32 +61,36 @@ NUMBER_OF_LABELS = 2
 # model_path_prefix = model_folder_path + '/patch_variant_2_16112021_model_'
 
 
-def predict_test_data(model, testing_generator, device, need_prob=False, need_feature_only=False, prob_path=None):
+def predict_test_data(model, testing_generator, device, need_prob=False, prob_path=None):
     y_pred = []
     y_test = []
     probs = []
+    losses = []
+    loss_function = nn.NLLLoss()
     urls = []
-    final_features = []
+    model.eval()
     with torch.no_grad():
-        model.eval()
-        for ids, url_batch, embedding_batch, label_batch in tqdm(testing_generator):
-            embedding_batch, label_batch = embedding_batch.to(device), label_batch.to(device)
+        for batch in tqdm(testing_generator, dynamic_ncols=True, leave=True):
+            
+            embedding_batch = batch["embeddings"].to(device)
+            label_batch = batch["labels"].to(device)
 
             outs = model(embedding_batch)
-            if need_feature_only:
-                final_features.extend(outs[1].tolist())
-                outs = outs[0]
-
-            outs = F.softmax(outs, dim=1)
-
-            y_pred.extend(torch.argmax(outs, dim=1).tolist())
+            outs_softmax = F.softmax(outs, dim=1)
+            outs_logsoftmax = F.log_softmax(outs, dim=1)
+            
+            loss = loss_function(outs_logsoftmax, label_batch)
+            losses.append(loss.item())
+            y_pred.extend(torch.argmax(outs_softmax, dim=1).tolist())
             y_test.extend(label_batch.tolist())
-            probs.extend(outs[:, 1].tolist())
-            urls.extend(list(url_batch))
+            probs.extend(outs_softmax[:, 1].tolist())
+            
+            urls.extend(batch["urls"])
 
         precision = metrics.precision_score(y_pred=y_pred, y_true=y_test)
         recall = metrics.recall_score(y_pred=y_pred, y_true=y_test)
         f1 = metrics.f1_score(y_pred=y_pred, y_true=y_test)
+        avg_loss = np.mean(losses) if losses else 0
         try:
             auc = metrics.roc_auc_score(y_true=y_test, y_score=probs)
         except Exception:
@@ -99,14 +104,10 @@ def predict_test_data(model, testing_generator, device, need_prob=False, need_fe
             for i, prob in enumerate(probs):
                 writer.writerow([urls[i], prob])
 
-
-    if need_feature_only:
-        return f1, urls, final_features
-
     if not need_prob:
-        return precision, recall, f1, auc
+        return precision, recall, f1, auc, avg_loss
     else:
-        return precision, recall, f1, auc, urls, probs
+        return precision, recall, f1, auc, urls, probs, avg_loss
 
 
 def train(model, learning_rate, number_of_epochs, training_generator, test_generator):
@@ -120,14 +121,27 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
         num_training_steps=num_training_steps
     )
     train_losses = []
+    
+    
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
+
+    progress_bar = tqdm(range(len(training_generator) * number_of_epochs), desc="", dynamic_ncols=True, leave=True)
+
 
     for epoch in range(number_of_epochs):
         model.train()
         total_loss = 0
+        train_losses = []  # Reset per epoch
         current_batch = 0
-        for id_batch, url_batch, embedding_batch, label_batch in training_generator:
-            embedding_batch, label_batch \
-                = embedding_batch.to(device), label_batch.to(device)
+        progress_bar.set_description(f"Epoch [{epoch+1}/{number_of_epochs}]")
+        
+        for batch in training_generator:
+            
+            
+            embedding_batch = batch["embeddings"].to(device)
+            label_batch = batch["labels"].to(device)
+
             outs = model(embedding_batch)
             outs = F.log_softmax(outs, dim=1)
             loss = loss_function(outs, label_batch)
@@ -139,17 +153,20 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
             total_loss += loss.detach().item()
 
             current_batch += 1
-            if current_batch % 50 == 0:
-                print("Train commit iter {}, total loss {}, average loss {}".format(current_batch, np.sum(train_losses),
-                                                                                    np.average(train_losses)))
+            
+            avg_loss = np.mean(train_losses)
+            progress_bar.update(1)
+            progress_bar.set_postfix({
+                "batch": current_batch,
+                "loss": total_loss,
+                "avg_loss": avg_loss
+            })
 
         print("epoch {}, training commit loss {}".format(epoch, np.sum(train_losses)))
-        train_losses = []
-
         model.eval()
 
         print("Result on testing dataset...")
-        precision, recall, f1, auc = predict_test_data(model=model,
+        precision, recall, f1, auc, val_loss = predict_test_data(model=model,
                                                        testing_generator=test_generator,
                                                        device=device)
 
@@ -159,6 +176,14 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
         print("AUC: {}".format(auc))
         print("-" * 32)
 
+        if val_loss < best_val_loss: # 
+                best_val_loss = val_loss
+                epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= EARLY_STOPPING_ROUND:
+                print(f"Early stopping triggered after {epoch+1} epochs.")
+                break
 
     if torch.cuda.device_count() > 1:
         torch.save(model.module.state_dict(), MODEL_PATH)
@@ -174,7 +199,7 @@ class CommitAggregator:
         self.file_transformer = file_transformer
 
     def transform(self, diff_list):
-        # cap at 20 diffs 
+        # cap at 20 file diffs 
         diff_list = diff_list[:20]
         input_list, mask_list = [], []
         for diff in diff_list:
@@ -197,6 +222,12 @@ class CommitAggregator:
         mean_ = mean_.cpu()
 
         return mean_
+
+def collate_fn(batch):
+    labels = torch.stack([item['label'] for item in batch])
+    embeddings = torch.stack([item['embedding'] for item in batch])
+    urls = [item['url'] for item in batch]
+    return {'labels': labels, 'embeddings': embeddings, 'urls': urls}
 
 
 def do_train(args):
@@ -230,49 +261,110 @@ def do_train(args):
     code_bert.eval()
     code_bert.to(device)
 
-    print("Finished loading")
-
-    aggregator = CommitAggregator(code_bert)
-
-    patch_data, label_data, url_data = vulfixminer_finetune.get_data(dataset_name)
-
-    train_ids, test_ids = [], []
-
-    index = 0
-
-    id_to_embeddings, id_to_label, id_to_url = {}, {}, {}
-    for i in tqdm(range(len(patch_data['train']))):
-        label = label_data['train'][i]
-        url = url_data['train'][i]
-        embeddings = aggregator.transform(patch_data['train'][i])
-        train_ids.append(index)
-        id_to_embeddings[index] = embeddings
-        id_to_label[index] = label
-        id_to_url[index] = url
-        # all_data.append(embeddings)
-        # all_label.append(label)
-        # all_url.append(url)
-        index += 1
-
-    for i in tqdm(range(len(patch_data['test']))):
-        label = label_data['test'][i]
-        url = url_data['test'][i]
-        embeddings = aggregator.transform(patch_data['test'][i])
-        test_ids.append(index)
-        id_to_embeddings[index] = embeddings
-        id_to_label[index] = label
-        id_to_url[index] = url
-        # all_data.append(embeddings)
-        # all_label.append(label)
-        # all_url.append(url)
-        index += 1
+    print("Finished loading model")
 
 
-    training_set = VulFixMinerDataset(train_ids, id_to_label, id_to_embeddings, id_to_url)
-    test_set = VulFixMinerDataset(test_ids, id_to_label, id_to_embeddings, id_to_url)
+    ds_commits = vulfixminer_finetune.load_data()
+    tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
     
-    training_generator = DataLoader(training_set, **TRAIN_PARAMS)
-    test_generator = DataLoader(test_set, **TEST_PARAMS)
+    def construct_urls(row):
+        url = row["owner"] + '/' + row["repo"] + '/commit/' + row["commit_id"]
+        row["url"] = url
+        return row
+    
+    ds_commits = ds_commits.map(
+        construct_urls,
+        batched=False,
+        batch_size=1,
+        num_proc=10,
+        desc="Constructing URLs for commits"
+    )
+    
+    
+    ds_diffs = ds_commits.map(
+        lambda x: {"diff": extract_file_diffs(x["diff"]).values()},
+        batched=False,
+        batch_size=1,
+        num_proc=10,
+        desc="Extracting file diffs from commits"
+    )
+    
+    
+    def process_added_removed(row):
+        file_codes = []
+        for diff in row["diff"]:
+            
+            added_code = get_code_version(diff=diff, added_version=True)
+            deleted_code = get_code_version(diff=diff, added_version=False)
+            
+            if not added_code and not deleted_code: # if all comments or empty lines
+                continue
+            file_codes.append(added_code + tokenizer.sep_token + deleted_code)
+        row["code"] = file_codes
+        
+        return row
+        
+    ds_code = ds_diffs.map(
+        process_added_removed,
+        batched=False,
+        batch_size=1,
+        num_proc=10,
+        remove_columns=["diff"],
+        desc="Processing added and removed changes"
+    )
+
+    ds_code = ds_code.filter(
+        lambda x: len(x["code"]) > 0,
+        batched=False,
+        num_proc=10
+    )
+
+    def preprocess_function(examples):
+        res = tokenizer(examples["code"], add_special_tokens=True, max_length=CODE_LENGTH, truncation=True, padding="max_length")
+        res["label"] = examples["label"]
+        return res
+
+    ds_tokenized = ds_code.map(preprocess_function, batched=False, num_proc=1, desc="Tokenizing")#, remove_columns=ds_code["train"].column_names)
+    ds_tokenized = ds_tokenized.with_format("torch")
+
+    def get_embeddings(row):
+        with torch.no_grad():
+            inputs = row['input_ids'].to(device)
+            attention = row['attention_mask'].to(device)
+            outputs = code_bert(inputs, attention)
+            embeddings = outputs.last_hidden_state[:, 0, :]
+            #sum_ = torch.sum(embeddings, dim=0)
+            #mean_ = torch.div(sum_, len(row['input_ids']))
+            mean_ = torch.mean(embeddings, dim=0).cpu()
+        
+        row["embedding"] = mean_
+
+        return row
+
+
+    predictions = ds_tokenized.map(
+        get_embeddings,
+        batched=False,
+        num_proc=1,
+        desc="Computing embeddings",
+    )
+    #ds_predictions = predictions.remove_columns(["input_ids", "attention_mask", "code"])
+    #ds_predictions = ds_predictions.rename_columns({"embeddings": "input_ids"})
+    
+    ds = predictions.with_format("torch", columns=["embedding", "label"], output_all_columns=True)
+    
+    
+    training_generator = DataLoader(
+        ds["train"],
+        collate_fn=collate_fn,
+        **TRAIN_PARAMS
+    )
+    
+    test_generator = DataLoader(
+        ds["test"],
+        collate_fn=collate_fn,
+        **TEST_PARAMS
+    )
    
     model = VulFixMinerClassifier()
 
