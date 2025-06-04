@@ -192,19 +192,19 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
 
 def load_data():
     ds_patches = load_dataset("fals3/cvcvc_commits", "patches", streaming=True)
-    ddict = DatasetDict()
-    ddict["train"] = Dataset.from_list([x for x in ds_patches["train"].take(10)])
+    #ddict = DatasetDict()
+    #ddict["train"] = Dataset.from_list([x for x in ds_patches["train"].take(10)])
     #ddict["validation"] = Dataset.from_list([x for x in ds_patches["validation"].take(10)])
-    ddict["test"] = Dataset.from_list([x for x in ds_patches["test"].take(10)])
-    ds_patches = ddict
+    #ddict["test"] = Dataset.from_list([x for x in ds_patches["test"].take(10)])
+    #ds_patches = ddict
     ds_patches = ds_patches.filter(lambda x: len(x['diff']) <= 45510, batched=False, num_proc=10)
     
     ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches", streaming=True)
-    ddict = DatasetDict()
-    ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
+    #ddict = DatasetDict()
+    #ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
     #ddict["validation"] = Dataset.from_list([x for x in ds_nonpatches["validation"].take(10)])
-    ddict["test"] = Dataset.from_list([x for x in ds_nonpatches["test"].take(10)])
-    ds_nonpatches = ddict
+    #ddict["test"] = Dataset.from_list([x for x in ds_nonpatches["test"].take(10)])
+    #ds_nonpatches = ddict
     ds_nonpatches = ds_nonpatches.filter(lambda x: len(x['diff']) <= 45510, batched=False, num_proc=10)
 
     ds_commits = DatasetDict()
