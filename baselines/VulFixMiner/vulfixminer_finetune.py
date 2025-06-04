@@ -16,6 +16,8 @@ import pandas as pd
 from utils import get_code_version, extract_file_diffs
 #import config
 import argparse
+from pathlib import Path
+from datasets import load_dataset, concatenate_datasets, DatasetDict, Dataset
 
 # dataset_name = 'sap_patch_dataset.csv'
 # FINE_TUNED_MODEL_PATH = 'model/patch_variant_2_finetuned_model.sav'
@@ -29,19 +31,13 @@ commit_code_folder_path = os.path.join(directory, 'commit_code')
 
 model_folder_path = os.path.join(directory, 'model')
 
-# rerun with 5 finetune epoch
-FINETUNE_EPOCH = 5
 
-LIMIT_FILE_COUNT = 5
-
-NUMBER_OF_EPOCHS = 5
-TRAIN_BATCH_SIZE = 4
-VALIDATION_BATCH_SIZE = 32
+NUMBER_OF_EPOCHS = 1#5
+TRAIN_BATCH_SIZE = 8
 TEST_BATCH_SIZE = 32
 EARLY_STOPPING_ROUND = 5
 
 TRAIN_PARAMS = {'batch_size': TRAIN_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
-VALIDATION_PARAMS = {'batch_size': VALIDATION_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
 TEST_PARAMS = {'batch_size': TEST_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
 
 LEARNING_RATE = 1e-5
@@ -62,33 +58,38 @@ HIDDEN_DIM_DROPOUT_PROB = 0.1
 NUMBER_OF_LABELS = 2
 
 
-def get_input_and_mask(tokenizer, code):
-    inputs = tokenizer(code, padding='max_length', max_length=CODE_LENGTH, truncation=True, return_tensors="pt")
 
-    return inputs.data['input_ids'][0], inputs.data['attention_mask'][0]
-
-
-def predict_test_data(model, testing_generator, device, need_prob=False):
+def predict_test_data(model, testing_generator, device):
     print("Testing...")
     y_pred = []
     y_test = []
-    urls = []
+    #urls = []
     probs = []
+    losses = []
+    loss_function = nn.NLLLoss()
+    
+    
     model.eval()
     with torch.no_grad():
-        for id_batch, url_batch, input_batch, mask_batch, label_batch in tqdm(testing_generator):
-            input_batch, mask_batch, label_batch \
-                = input_batch.to(device), mask_batch.to(device), label_batch.to(device)
-
+        for batch in tqdm(testing_generator, dynamic_ncols=True, leave=True):
+            
+            input_batch = batch["input_ids"].to(device)
+            mask_batch = batch["attention_mask"].to(device)
+            label_batch = batch["labels"].to(device)
+            
             outs = model(input_batch, mask_batch)
-            outs = F.softmax(outs, dim=1)
-            y_pred.extend(torch.argmax(outs, dim=1).tolist())
+            outs_logsoftmax = F.log_softmax(outs, dim=1)
+            outs_softmax = F.softmax(outs, dim=1)
+            loss = loss_function(outs_logsoftmax, label_batch)
+            losses.append(loss.item())
+            y_pred.extend(torch.argmax(outs_softmax, dim=1).tolist())
             y_test.extend(label_batch.tolist())
-            probs.extend(outs[:, 1].tolist())
-            urls.extend(list(url_batch))
+            probs.extend(outs_softmax[:, 1].tolist())
+            #urls.extend(list(url_batch))
         precision = metrics.precision_score(y_pred=y_pred, y_true=y_test)
         recall = metrics.recall_score(y_pred=y_pred, y_true=y_test)
         f1 = metrics.f1_score(y_pred=y_pred, y_true=y_test)
+        avg_loss = np.mean(losses) if losses else 0
 
         try:
             auc = metrics.roc_auc_score(y_true=y_test, y_score=probs)
@@ -96,10 +97,7 @@ def predict_test_data(model, testing_generator, device, need_prob=False):
             auc = 0
 
     print("Finish testing")
-    if not need_prob:
-        return precision, recall, f1, auc
-    else:
-        return precision, recall, f1, auc, urls, probs
+    return precision, recall, f1, auc, avg_loss
 
 
 def train(model, learning_rate, number_of_epochs, training_generator, test_generator):
@@ -114,13 +112,24 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
     )
     train_losses = []
 
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
+
+    progress_bar = tqdm(range(len(training_generator) * number_of_epochs), desc="", dynamic_ncols=True, leave=True)
+
     for epoch in range(number_of_epochs):
         model.train()
         total_loss = 0
+        train_losses = []  # Reset per epoch
         current_batch = 0
-        for id_batch, url_batch, input_batch, mask_batch, label_batch in tqdm(training_generator):
-            input_batch, mask_batch, label_batch \
-                = input_batch.to(device), mask_batch.to(device), label_batch.to(device)
+        progress_bar.set_description(f"Epoch [{epoch+1}/{number_of_epochs}]")
+
+        for batch in training_generator:
+            
+            input_batch = batch["input_ids"].to(device)
+            mask_batch = batch["attention_mask"].to(device)
+            label_batch = batch["labels"].to(device)
+
             outs = model(input_batch, mask_batch)
             outs = F.log_softmax(outs, dim=1)
             loss = loss_function(outs, label_batch)
@@ -132,9 +141,17 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
             total_loss += loss.detach().item()
 
             current_batch += 1
-            if current_batch % 50 == 0:
-                print("Train commit iter {}, total loss {}, average loss {}".format(current_batch, np.sum(train_losses),
-                                                                                    np.average(train_losses)))
+
+            avg_loss = np.mean(train_losses)
+            progress_bar.update(1)
+            progress_bar.set_postfix({
+                "batch": current_batch,
+                "loss": total_loss,
+                "avg_loss": avg_loss
+            })
+
+        
+        progress_bar.close()
 
         print("epoch {}, training commit loss {}".format(epoch, np.sum(train_losses)))
         train_losses = []
@@ -142,257 +159,175 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
         model.eval()
 
         print("Result on testing dataset...")
-        precision, recall, f1, auc = predict_test_data(model=model,
-                                                       testing_generator=test_generator,
-                                                       device=device)
-        
+        precision, recall, f1, auc, val_loss = predict_test_data(
+            model=model,
+            testing_generator=test_generator,
+            device=device
+        )
+
         print("Precision: {}".format(precision))
         print("Recall: {}".format(recall))
         print("F1: {}".format(f1))
         print("AUC: {}".format(auc))
+        print("Validation loss: {}".format(val_loss))
         print("-" * 32)
 
-        if epoch + 1 == FINETUNE_EPOCH:
-            torch.save(model.state_dict(), FINE_TUNED_MODEL_PATH)
-            if not isinstance(model, nn.DataParallel):
-                model.freeze_codebert()
-            else:
-                model.module.freeze_codebert()
+        if val_loss < best_val_loss: # 
+            best_val_loss = val_loss
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= EARLY_STOPPING_ROUND:
+                print(f"Early stopping triggered after {epoch+1} epochs.")
+                break
+
+          
+    if torch.cuda.device_count() > 1:
+        torch.save(model.module.state_dict(), FINE_TUNED_MODEL_PATH)
+    else:
+        torch.save(model.state_dict(), FINE_TUNED_MODEL_PATH)
+
     return model
 
 
-def retrieve_patch_data(all_data, all_label, all_url):
-    tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
-
-    print("Preparing tokenizer data...")
-
-    id_to_label = {}
-    id_to_url = {}
-    id_to_input = {}
-    id_to_mask = {}
-    for i, diff in tqdm(enumerate(all_data)):
-        added_code = get_code_version(diff=diff, added_version=True)
-        deleted_code = get_code_version(diff=diff, added_version=False)
-
-        code = added_code + tokenizer.sep_token + deleted_code
-
-        input_ids, mask = get_input_and_mask(tokenizer, [code])
-        id_to_input[i] = input_ids
-        id_to_mask[i] = mask
-        id_to_label[i] = all_label[i]
-        id_to_url[i] = all_url[i]
-
-    return id_to_input, id_to_mask, id_to_label, id_to_url
-
-
-def get_sap_data(dataset_name):
-    print("Reading dataset...")
-    df = pd.read_csv(dataset_name)
-    df = df[['commit_id', 'repo', 'partition', 'diff', 'label', 'PL']]
-    items = df.to_numpy().tolist()
-
-    url_to_diff = {}
-    url_to_partition = {}
-    url_to_label = {}
-    url_to_pl = {}
-    for item in items:
-        commit_id = item[0]
-        repo = item[1]
-        url = repo + '/commit/' + commit_id
-        partition = item[2]
-        diff = item[3]
-        label = item[4]
-        pl = item[5]
-
-        if url not in url_to_diff:
-            url_to_diff[url] = []
-
-        url_to_diff[url].append(diff)
-        url_to_partition[url] = partition
-        url_to_label[url] = label
-        url_to_pl[url] = pl
-
-    return url_to_diff, url_to_partition, url_to_label, url_to_pl
-
-
-def get_tensor_flow_data(dataset_name):
-    print("Reading dataset...")
-    df = pd.read_csv(dataset_name)
-    df = df[['commit_id', 'repo', 'msg', 'filename', 'diff', 'label', 'partition']]
-    items = df.to_numpy().tolist()
-
-    url_to_diff = {}
-    url_to_partition = {}
-    url_to_label = {}
-    url_to_pl = {}
-    for item in items:
-        commit_id = item[0]
-        repo = item[1]
-        url = repo + '/commit/' + commit_id
-        partition = item[6]
-        diff = item[4]
-
-        if pd.isnull(diff):   
-            continue
-        
-        label = item[5]
-        pl = "UNKNOWN"
-
-        if url not in url_to_diff:
-            url_to_diff[url] = []
-
-        url_to_diff[url].append(diff)
-        url_to_partition[url] = partition
-        url_to_label[url] = label
-        url_to_pl[url] = pl
-
-    return url_to_diff, url_to_partition, url_to_label, url_to_pl
-
-
-def get_cvevc_data():
-    from datasets import load_dataset, concatenate_datasets, DatasetDict
-
-    # Login using e.g. `huggingface-cli login` to access this dataset
-    ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches")
-    ds_patches = load_dataset("fals3/cvcvc_commits", "patches")
-    
-    #from datasets import DatasetDict, Dataset
-    #ds_patches = load_dataset("fals3/cvcvc_commits", "patches", streaming=True)
-    #ddict = DatasetDict()
-    #ddict["train"] = Dataset.from_list([x for x in ds_patches["train"].take(10)])
+def load_data():
+    ds_patches = load_dataset("fals3/cvcvc_commits", "patches", streaming=True)
+    ddict = DatasetDict()
+    ddict["train"] = Dataset.from_list([x for x in ds_patches["train"].take(10)])
     #ddict["validation"] = Dataset.from_list([x for x in ds_patches["validation"].take(10)])
-    #ddict["test"] = Dataset.from_list([x for x in ds_patches["test"].take(10)])
-    #ds_patches = ddict
-    #
-    #ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches", streaming=True)
-    #ddict = DatasetDict()
-    #ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
-    #ddict["validation"] = Dataset.from_list([x for x in ds_nonpatches["validation"].take(10)])
-    #ddict["test"] = Dataset.from_list([x for x in ds_nonpatches["test"].take(10)])
-    #ds_nonpatches = ddict
+    ddict["test"] = Dataset.from_list([x for x in ds_patches["test"].take(10)])
+    ds_patches = ddict
+    ds_patches = ds_patches.filter(lambda x: len(x['diff']) <= 45510, batched=False, num_proc=10)
     
+    ds_nonpatches = load_dataset("fals3/cvcvc_commits", "non_patches", streaming=True)
+    ddict = DatasetDict()
+    ddict["train"] = Dataset.from_list([x for x in ds_nonpatches["train"].take(10)])
+    #ddict["validation"] = Dataset.from_list([x for x in ds_nonpatches["validation"].take(10)])
+    ddict["test"] = Dataset.from_list([x for x in ds_nonpatches["test"].take(10)])
+    ds_nonpatches = ddict
+    ds_nonpatches = ds_nonpatches.filter(lambda x: len(x['diff']) <= 45510, batched=False, num_proc=10)
+
     ds_commits = DatasetDict()
     for key in ds_nonpatches:
         ds_commits[key] = concatenate_datasets([ds_nonpatches[key], ds_patches[key]])
     
-    url_to_diff = {}
-    url_to_partition = {}
-    url_to_label = {}
-    url_to_pl = {}
     
-    for split in ds_commits:
-        for item in tqdm(ds_commits[split]):
-            for diff in extract_file_diffs(item["diff"]).values():
-                if not diff:
-                    continue
-                commit_id = item['commit_id']
-                url = item['owner'] + "/" + item['repo'] + '/commit/' + commit_id
-                if pd.isnull(diff):   
-                    continue
-                
-                label = item['label']
-                pl = "UNKNOWN"
-                
-                if url not in url_to_diff:
-                    url_to_diff[url] = []
-            
-                url_to_diff[url].append(diff)
-                url_to_partition[url] = split
-                url_to_label[url] = label
-                url_to_pl[url] = pl
-            
-    return url_to_diff, url_to_partition, url_to_label, url_to_pl
-    
-
-def get_data(dataset_name):
-
-    if dataset_name == 'sap_patch_dataset.csv':
-        url_to_diff, url_to_partition, url_to_label, url_to_pl = get_sap_data(dataset_name)
-    elif dataset_name == 'fals3/cvevc_commits':
-        url_to_diff, url_to_partition, url_to_label, url_to_pl = get_cvevc_data()
-    else:
-        url_to_diff, url_to_partition, url_to_label, url_to_pl = get_tensor_flow_data(dataset_name) 
-        
-    patch_train, patch_test = [], []
-    label_train, label_test = [], []
-    url_train, url_test = [], []
-
-    print(len(url_to_diff.keys()))
-    # diff here is diff list 
-    for key in url_to_diff.keys():
-        url = key
-        diff = url_to_diff[key]
-        label = url_to_label[key]
-        partition = url_to_partition[key]
-        pl = url_to_pl[key]
-        if partition == 'train':
-            patch_train.append(diff)
-            label_train.append(label)
-            url_train.append(url)
-        elif partition == 'test':
-            patch_test.append(diff)
-            label_test.append(label)
-            url_test.append(url)
-
-    print("Finish reading dataset")
-    patch_data = {'train': patch_train, 'test': patch_test}
-
-    label_data = {'train': label_train, 'test': label_test}
-
-    url_data = {'train': url_train, 'test': url_test}
-
-    return patch_data, label_data, url_data
+    return ds_commits
 
 
 def do_train(args):
     global dataset_name, FINE_TUNED_MODEL_PATH
 
-    dataset_name = args.dataset_path
     
     FINE_TUNED_MODEL_PATH = args.finetune_model_path
 
-    print("Dataset name: {}".format(dataset_name))
     print("Saving model to: {}".format(FINE_TUNED_MODEL_PATH))
 
-    patch_data, label_data, url_data = get_data(dataset_name)
-
-    train_ids, test_ids = [], []
-
-    index = 0
-    all_data, all_label, all_url = [], [], []
-
-    for i in range(len(patch_data['train'])):
-        label = label_data['train'][i]
-        url = url_data['train'][i]
-        for j in range(len(patch_data['train'][i])) :
-            diff = patch_data['train'][i][j]
-            train_ids.append(index)
-            all_data.append(diff)
-            all_label.append(label)
-            all_url.append(url)
-            index += 1
-
-    for i in range(len(patch_data['test'])):
-        label = label_data['test'][i]
-        url = url_data['test'][i]
-        for j in range(len(patch_data['test'][i])) :
-            diff = patch_data['test'][i][j]
-            test_ids.append(index)
-            all_data.append(diff)
-            all_label.append(label)
-            all_url.append(url)
-            index += 1
-
-
-    print("Preparing commit patch data...")
-    id_to_input, id_to_mask, id_to_label, id_to_url = retrieve_patch_data(all_data, all_label, all_url)
-    print("Finish preparing commit patch data")
     
-    training_set = VulFixMinerFileDataset(train_ids, id_to_label, id_to_url, id_to_input, id_to_mask)
-    test_set = VulFixMinerFileDataset(test_ids, id_to_label, id_to_url, id_to_input, id_to_mask)
+    from datasets import load_dataset, concatenate_datasets, DatasetDict, Dataset
+    #ds_nonpatches = load_dataset("fals3/cvcvc_commits", "patches")
+    #ds_nonpatches = ds_patches.filter(lambda x: len(x['diff']) <= 45510, batched=False, num_proc=10)
 
-    training_generator = DataLoader(training_set, **TRAIN_PARAMS)
-    test_generator = DataLoader(test_set, **TEST_PARAMS)
+    #ds_patches = load_dataset("fals3/cvcvc_commits", "patches")
+    #ds_patches = ds_patches.filter(lambda x: len(x['diff']) <= 45510, batched=False, num_proc=10)
+    
+    #ds_commits = DatasetDict()
+    #for key in ds_nonpatches:
+    #    ds_commits[key] = concatenate_datasets([ds_nonpatches[key], ds_patches[key]])
+    
+    
+    ds_commits = load_data()    
+    tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
+
+
+    
+
+    def explode_file_diffs(batch):
+        """
+        Splits each commit diff into multiple rows, one per file diff.
+
+        Args:
+            batch (dict of lists): A batch from the dataset containing keys like 'diff', 'commit_id', etc.
+
+        Returns:
+            dict of lists: Same keys, but expanded so that each file diff is a separate row.
+        """
+        exploded_data = {}
+
+        # Initialize empty lists for each field
+        for key in batch.keys():
+            exploded_data[key] = []
+
+        # Add new fields for filename and filediff
+        exploded_data['file_path'] = []
+        exploded_data['file_diff'] = []
+
+        for i in range(len(batch['diff'])):
+            commit_diff = batch['diff'][i]
+            file_diffs = extract_file_diffs(commit_diff)
+            
+            for file_path, file_diff in file_diffs.items():
+                # Keep original metadata for each file diff
+                for key in batch.keys():
+                    exploded_data[key].append(batch[key][i])
+                exploded_data['file_path'].append(file_path)
+                exploded_data['file_diff'].append(file_diff)
+
+        
+        return exploded_data
+
+
+    ds_files = ds_commits.map(
+        explode_file_diffs,
+        batched=True,
+        batch_size=1,
+        num_proc=10,
+    )
+
+    ds_files = ds_files.remove_columns(["diff"])
+
+
+    def process_added_removed(row):
+        
+        added_code = get_code_version(diff=row["file_diff"], added_version=True)
+        deleted_code = get_code_version(diff=row["file_diff"], added_version=False)
+        
+        row["code"] = added_code + tokenizer.sep_token + deleted_code
+        
+        return row
+        
+    ds_code = ds_files.map(
+        process_added_removed,
+        batched=False,
+        batch_size=1,
+        num_proc=10,
+        remove_columns=["file_diff"]
+    )
+
+
+    def preprocess_function(examples):
+        res = tokenizer(examples["code"], add_special_tokens=True, max_length=CODE_LENGTH, truncation=True, padding="max_length")
+        res["label"] = examples["label"]
+        return res
+
+    ds_tokenized = ds_code.map(preprocess_function, batched=False, num_proc=10, remove_columns=ds_code["train"].column_names)
+
+    ds = ds_tokenized.with_format("torch", columns=["input_ids", "attention_mask", "label"])
+    
+    from transformers import DataCollatorWithPadding
+
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    training_generator = DataLoader(
+        ds["train"],
+        collate_fn=data_collator,
+        **TRAIN_PARAMS
+    )
+    
+    test_generator = DataLoader(
+        ds["test"],
+        collate_fn=data_collator,
+        **TEST_PARAMS
+    )
 
     model = VulFixMinerFineTuneClassifier()
 
@@ -409,18 +344,18 @@ def do_train(args):
           training_generator=training_generator,
           test_generator=test_generator)
 
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
-    parser.add_argument('--dataset_path',
-                        type=str,
-                        default="fals3/cvevc_commits",
-                        help='name of dataset')
     parser.add_argument('--finetune_model_path',
                         type=str,
                         default="output/finetuned_model.pt",
                         help='select path to save model')
 
     args = parser.parse_args()
+    
+    # ensure path exists
+    Path(args.finetune_model_path).parent.mkdir(parents=True, exist_ok=True)
 
     do_train(args)
