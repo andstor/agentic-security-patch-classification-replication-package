@@ -133,7 +133,6 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
         model.train()
         total_loss = 0
         train_losses = []  # Reset per epoch
-        current_batch = 0
         progress_bar.set_description(f"Epoch [{epoch+1}/{number_of_epochs}]")
         
         for batch in training_generator:
@@ -152,12 +151,10 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
             lr_scheduler.step()
             total_loss += loss.detach().item()
 
-            current_batch += 1
             
             avg_loss = np.mean(train_losses)
             progress_bar.update(1)
             progress_bar.set_postfix({
-                "batch": current_batch,
                 "loss": total_loss,
                 "avg_loss": avg_loss
             })
