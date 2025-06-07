@@ -321,7 +321,7 @@ def do_train(args):
         res["label"] = examples["label"]
         return res
 
-    ds_tokenized = ds_code.map(preprocess_function, batched=False, num_proc=1, desc="Tokenizing")#, remove_columns=ds_code["train"].column_names)
+    ds_tokenized = ds_code.map(preprocess_function, batched=False, num_proc=10, desc="Tokenizing")#, remove_columns=ds_code["train"].column_names)
     ds_tokenized = ds_tokenized.with_format("torch")
 
     def get_embeddings(row):
