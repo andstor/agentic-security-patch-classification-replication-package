@@ -148,7 +148,7 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
             })
 
         
-        progress_bar.close()
+        
 
         print("epoch {}, training commit loss {}".format(epoch, np.sum(train_losses)))
         train_losses = []
@@ -177,7 +177,7 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
             if epochs_no_improve >= EARLY_STOPPING_ROUND:
                 print(f"Early stopping triggered after {epoch+1} epochs.")
                 break
-
+    progress_bar.close()
           
     if torch.cuda.device_count() > 1:
         torch.save(model.module.state_dict(), FINE_TUNED_MODEL_PATH)

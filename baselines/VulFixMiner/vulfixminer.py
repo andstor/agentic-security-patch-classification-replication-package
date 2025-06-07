@@ -181,7 +181,9 @@ def train(model, learning_rate, number_of_epochs, training_generator, test_gener
             if epochs_no_improve >= EARLY_STOPPING_ROUND:
                 print(f"Early stopping triggered after {epoch+1} epochs.")
                 break
-
+    
+    progress_bar.close()
+    
     if torch.cuda.device_count() > 1:
         torch.save(model.module.state_dict(), MODEL_PATH)
     else:
