@@ -32,15 +32,13 @@ model_folder_path = os.path.join(directory, 'model')
 
 
 # retest with SAP dataset
-NUMBER_OF_EPOCHS = 20
+NUMBER_OF_EPOCHS = 60
 EARLY_STOPPING_ROUND = 5
 
-TRAIN_BATCH_SIZE = 64
-VALIDATION_BATCH_SIZE = 64
-TEST_BATCH_SIZE = 64
+TRAIN_BATCH_SIZE = 1024
+TEST_BATCH_SIZE = 1024
 
 TRAIN_PARAMS = {'batch_size': TRAIN_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
-VALIDATION_PARAMS = {'batch_size': VALIDATION_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
 TEST_PARAMS = {'batch_size': TEST_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
 
 LEARNING_RATE = 1e-5
