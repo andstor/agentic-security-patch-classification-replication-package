@@ -244,13 +244,13 @@ def do_train(args):
 
     print("Loading finetuned file transformer...")
     finetune_model = VulFixMinerFineTuneClassifier()
+    
+    finetune_model.load_state_dict(torch.load(FINETUNE_MODEL_PATH))
 
     if torch.cuda.device_count() > 1:
         # print("Let's use", torch.cuda.device_count(), "GPUs!")
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         finetune_model = nn.DataParallel(finetune_model)
-
-    finetune_model.load_state_dict(torch.load(FINETUNE_MODEL_PATH))
     
     if hasattr(finetune_model, "module"):
         code_bert = finetune_model.module.code_bert
