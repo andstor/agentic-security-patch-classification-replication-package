@@ -3,7 +3,8 @@ import sys
 import json
 import pickle
 import argparse
-import logging # Import the logging module
+import logging
+import time # Import the time module
 from datasets import load_dataset
 import polars as pl
 from git import Repo
@@ -27,11 +28,11 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
     cve_output_dir = os.path.join(output_dir, cve_id)
     os.makedirs(cve_output_dir, exist_ok=True)
 
-    logger.info(f"🔍 Processing CVE: {cve_id}") # Replaced print
+    logger.info(f"🔍 Processing CVE: {cve_id}")
     cands = cands_df.filter(pl.col("cve") == cve_id)
 
     if len(cands) == 0:
-        logger.warning(f"⚠️ No candidates found for {cve_id}") # Replaced print
+        logger.warning(f"⚠️ No candidates found for {cve_id}")
         return
 
     repo_name = cands["repo"].first()
@@ -41,11 +42,11 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
 
 
     if not os.path.exists(repo_path):
-        logger.info(f"📥 Cloning {repo_url}") # Replaced print
+        logger.info(f"📥 Cloning {repo_url}")
         try:
             Repo.clone_from(repo_url, repo_path, depth=1)
         except Exception as e:
-            logger.error(f"❌ Failed to clone repo: {e}") # Replaced print
+            logger.error(f"❌ Failed to clone repo: {e}")
             return
 
     repo = Repo(repo_path)
@@ -70,7 +71,7 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
 
     for row in cands.iter_rows(named=True):
         commit_id = row["commit_id"]
-        logger.info(f"→ Commit {commit_id}") # Replaced print
+        logger.info(f"→ Commit {commit_id}")
 
         # Paths for the result and trace files for this specific commit
         commit_results_json_path = os.path.join(cve_output_dir, f"{commit_id}_results.json")
@@ -78,7 +79,7 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
         commit_trace_pickle_path = os.path.join(cve_output_dir, "trace", f"{commit_id}_trace.pkl")
 
         if not overwrite and os.path.exists(commit_results_json_path):
-            logger.info(f"⏭️  Skipping commit {commit_id} (results file already exists and overwrite is false)") # Replaced print
+            logger.info(f"⏭️  Skipping commit {commit_id} (results file already exists and overwrite is false)")
             continue
 
         try:
@@ -86,9 +87,10 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
             repo.git.checkout("FETCH_HEAD")
             repo.git.reset("--hard")
         except Exception as e:
-            logger.error(f"❌ Git error on {commit_id}: {e}") # Replaced print
+            logger.error(f"❌ Git error on {commit_id}: {e}")
             continue
 
+        start_time = time.time() # Start timer
         try:
             task = USER_PROMPT_TIER_3.format(
                 user_prompt_patch_info=USER_PROMPT_PATCH_INFO.format(
@@ -102,8 +104,10 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
             answer = agent.run(task=task)
             trace = agent.memory.get_full_steps()
         except Exception as e:
-            logger.error(f"⚠️  Agent failed on {commit_id}: {e}") # Replaced print
+            logger.error(f"⚠️  Agent failed on {commit_id}: {e}")
             continue
+        end_time = time.time() # End timer
+        duration = end_time - start_time # Calculate duration
 
         predicted_label = "true" in str(answer).lower()
 
@@ -113,6 +117,7 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
             "commit_id": commit_id,
             "ground_truth": True if row["label"] == 1 else False,
             "prediction": predicted_label,
+            "duration": duration, # Add processing time
         }
 
         # Save the combined results (including trace) to a JSON file
@@ -120,16 +125,16 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
             f.write(json.dumps(result, indent=2))
 
         # Save the trace separately to a JSON file
-        os.makedirs(os.path.dirname(commit_trace_json_path), exist_ok=True) # Ensure trace directory exists
+        os.makedirs(os.path.dirname(commit_trace_json_path), exist_ok=True)
         with open(commit_trace_json_path, "w") as f:
             f.write(json.dumps(trace, default=str, indent=2))
 
         # Save the trace separately to a Pickle file
-        os.makedirs(os.path.dirname(commit_trace_pickle_path), exist_ok=True) # Ensure trace directory exists
+        os.makedirs(os.path.dirname(commit_trace_pickle_path), exist_ok=True)
         with open(commit_trace_pickle_path, "wb") as f:
             f.write(pickle.dumps(trace))
 
-        logger.info(f"✅ Saved results to {commit_results_json_path}, trace to {commit_trace_json_path}, {commit_trace_pickle_path}") # Replaced print
+        logger.info(f"✅ Saved results to {commit_results_json_path}, trace to {commit_trace_json_path}, {commit_trace_pickle_path}. Took {duration:.2f} seconds.")
 
 def main():
     parser = argparse.ArgumentParser(description="Run patch classification agent on CVE candidates.")
@@ -151,7 +156,7 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(args.log_file),
-            logging.StreamHandler(sys.stdout) # Also log to console
+            logging.StreamHandler(sys.stdout)
         ]
     )
 
@@ -184,7 +189,7 @@ def main():
         if args.limit:
             cve_list = cve_list[:args.limit]
 
-        logger.info(f"Processing {len(cve_list)} CVEs.") # Replaced print
+        logger.info(f"Processing {len(cve_list)} CVEs.")
         for cve_id in cve_list:
             process_single_cve(cve_id, cands_df, model, args.local_dir, args.output_dir, args.overwrite)
 
