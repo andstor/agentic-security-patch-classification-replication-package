@@ -3,6 +3,7 @@ import sys
 import json
 import pickle
 import argparse
+import logging # Import the logging module
 from datasets import load_dataset
 import polars as pl
 from git import Repo
@@ -18,16 +19,19 @@ from src.tools.scroll_file_tool import ScrollFileTool
 from src.tools.cve_info_tool import CVEReportTool
 
 
+# Set up logging at the module level
+logger = logging.getLogger(__name__)
+
 def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite=False):
     # Directory for all results related to this CVE (main results and traces)
     cve_output_dir = os.path.join(output_dir, cve_id)
     os.makedirs(cve_output_dir, exist_ok=True)
 
-    print(f"\n🔍 Processing CVE: {cve_id}")
+    logger.info(f"🔍 Processing CVE: {cve_id}") # Replaced print
     cands = cands_df.filter(pl.col("cve") == cve_id)
 
     if len(cands) == 0:
-        print(f"⚠️ No candidates found for {cve_id}")
+        logger.warning(f"⚠️ No candidates found for {cve_id}") # Replaced print
         return
 
     repo_name = cands["repo"].first()
@@ -37,11 +41,11 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
 
 
     if not os.path.exists(repo_path):
-        print(f"📥 Cloning {repo_url}")
+        logger.info(f"📥 Cloning {repo_url}") # Replaced print
         try:
             Repo.clone_from(repo_url, repo_path, depth=1)
         except Exception as e:
-            print(f"❌ Failed to clone repo: {e}")
+            logger.error(f"❌ Failed to clone repo: {e}") # Replaced print
             return
 
     repo = Repo(repo_path)
@@ -66,17 +70,15 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
 
     for row in cands.iter_rows(named=True):
         commit_id = row["commit_id"]
-        print(f"→ Commit {commit_id}")
+        logger.info(f"→ Commit {commit_id}") # Replaced print
 
         # Paths for the result and trace files for this specific commit
         commit_results_json_path = os.path.join(cve_output_dir, f"{commit_id}_results.json")
         commit_trace_json_path = os.path.join(cve_output_dir, "trace", f"{commit_id}_trace.json")
         commit_trace_pickle_path = os.path.join(cve_output_dir, "trace", f"{commit_id}_trace.pkl")
-        # Ensure trace directory exists
-        os.makedirs(os.path.dirname(commit_trace_json_path), exist_ok=True)
 
         if not overwrite and os.path.exists(commit_results_json_path):
-            print(f"⏭️  Skipping commit {commit_id} (results file already exists and overwrite is false)")
+            logger.info(f"⏭️  Skipping commit {commit_id} (results file already exists and overwrite is false)") # Replaced print
             continue
 
         try:
@@ -84,7 +86,7 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
             repo.git.checkout("FETCH_HEAD")
             repo.git.reset("--hard")
         except Exception as e:
-            print(f"❌ Git error on {commit_id}: {e}")
+            logger.error(f"❌ Git error on {commit_id}: {e}") # Replaced print
             continue
 
         try:
@@ -100,7 +102,7 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
             answer = agent.run(task=task)
             trace = agent.memory.get_full_steps()
         except Exception as e:
-            print(f"⚠️  Agent failed on {commit_id}: {e}")
+            logger.error(f"⚠️  Agent failed on {commit_id}: {e}") # Replaced print
             continue
 
         predicted_label = "true" in str(answer).lower()
@@ -118,14 +120,16 @@ def process_single_cve(cve_id, cands_df, model, local_dir, output_dir, overwrite
             f.write(json.dumps(result, indent=2))
 
         # Save the trace separately to a JSON file
+        os.makedirs(os.path.dirname(commit_trace_json_path), exist_ok=True) # Ensure trace directory exists
         with open(commit_trace_json_path, "w") as f:
             f.write(json.dumps(trace, default=str, indent=2))
 
         # Save the trace separately to a Pickle file
+        os.makedirs(os.path.dirname(commit_trace_pickle_path), exist_ok=True) # Ensure trace directory exists
         with open(commit_trace_pickle_path, "wb") as f:
             f.write(pickle.dumps(trace))
 
-        print(f"✅ Saved results to {commit_results_json_path}, trace to {commit_trace_json_path}, {commit_trace_pickle_path}")
+        logger.info(f"✅ Saved results to {commit_results_json_path}, trace to {commit_trace_json_path}, {commit_trace_pickle_path}") # Replaced print
 
 def main():
     parser = argparse.ArgumentParser(description="Run patch classification agent on CVE candidates.")
@@ -134,9 +138,22 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="Limit number of CVEs to process")
     parser.add_argument("--cve", type=str, help="Process only a single CVE (e.g. CVE-2019-10782)")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output files")
+    parser.add_argument("--log-file", type=str, default="application.log", help="Path to the log file")
+    parser.add_argument("--log-level", type=str, default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Set the logging level")
 
     args = parser.parse_args()
-    load_dotenv(".env")
+    load_dotenv("../.env")
+
+    # Configure logging
+    log_level = getattr(logging, args.log_level.upper())
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(args.log_file),
+            logging.StreamHandler(sys.stdout) # Also log to console
+        ]
+    )
 
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.local_dir, exist_ok=True)
@@ -167,7 +184,7 @@ def main():
         if args.limit:
             cve_list = cve_list[:args.limit]
 
-        print(f"Processing {len(cve_list)} CVEs.")
+        logger.info(f"Processing {len(cve_list)} CVEs.") # Replaced print
         for cve_id in cve_list:
             process_single_cve(cve_id, cands_df, model, args.local_dir, args.output_dir, args.overwrite)
 
