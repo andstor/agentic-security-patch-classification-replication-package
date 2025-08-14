@@ -103,8 +103,8 @@ def main_worker(mainq: Queue, writeq: Queue, sem: BoundedSemaphore): # type: ign
                             writeq.put((data, "patches_data.jsonl"))
                             pbar.update(1)
                     
-                    # get latest 20000 commits
-                    commits = take(repo.iter_commits(), 20000)
+                    # get all commits
+                    commits = list(repo.iter_commits())
                     random.shuffle(commits)
                     #select 5000 commits or all commits if less than 5000
                     count = 0
