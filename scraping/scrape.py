@@ -56,10 +56,14 @@ def jsonl_writer_worker(q: Queue):
             if m is None:
                 break
             data, file = m
-            with open(Path(OUTPUT_DIR) / file, "a") as f:
-                f.write(json.dumps(data))
-                f.write("\n")
-                f.flush()
+            try:
+                with open(Path(OUTPUT_DIR) / file, "a") as f:
+                    f.write(json.dumps(data))
+                    f.write("\n")
+                    f.flush()
+            except Exception as e:
+                print(f"Error writing to {file}: {e}")
+                
         except queue.Empty:
             continue
 
