@@ -90,7 +90,7 @@ def main_worker(mainq: Queue, writeq: Queue, sem: BoundedSemaphore): # type: ign
                                 continue
                             
                             patch_commits.append(commit)
-                            diff = commit.repo.git.show(commit.hexsha) # Non-plumbing commands in git output in utf-8.
+                            diff = commit.repo.git.show(commit.hexsha, '-m') # Non-plumbing commands in git output in utf-8.
                             
                             #cve,owner,repo,commit_id,label,desc_token,msg_token,diff_token
                             data = {
@@ -112,7 +112,7 @@ def main_worker(mainq: Queue, writeq: Queue, sem: BoundedSemaphore): # type: ign
                         commit = commits.pop()
                         if commit in patch_commits:
                             continue
-                        diff = commit.repo.git.show(commit.hexsha)
+                        diff = commit.repo.git.show(commit.hexsha, '-m')
                         data = {
                             "commit_id": commit.hexsha,
                             "owner": repo_owner,
