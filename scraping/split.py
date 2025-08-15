@@ -188,6 +188,6 @@ api = HfApi()
 api.upload_file(
     path_or_fileobj="./output/meta.jsonl",
     path_in_repo="meta.jsonl",
-    repo_id="fals3/cvevc",
+    repo_id="fals3/cvevc_commits",
     repo_type="dataset",
 )
