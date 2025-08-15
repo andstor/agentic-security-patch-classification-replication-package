@@ -4,6 +4,7 @@ from datasets import Dataset, Features, Value, concatenate_datasets, DatasetDict
 from datasets import Features, Value
 from functools import partial
 from tqdm import tqdm
+import numpy as np
 
 import json
 from datasets import Dataset, Features, Value
@@ -27,6 +28,9 @@ def jsonl_generator(file_path, num_handles=1, shards=[0]):
                     #encode commit message to utf-8
                     #data['diff'] = data['diff'].encode('utf-8', 'surrogateescape').decode('ISO-8859-1')
                     data['diff'] = data['diff'].encode('utf-8', "replace").decode('utf-8')
+                    # combine owner and repo into a single string
+                    data['repo'] = data['owner'] + "/" + data['repo']
+
                     yield data
                 except:
                     #print(f"Error encoding line: {line}")
@@ -75,7 +79,6 @@ def split_numbers_from_dict(data, percent_train=0.80, percent_test=0.20):
 # Load the dataset
 features = Features({
     'commit_id': Value(dtype='string'),
-    'owner': Value(dtype='string'),
     'repo': Value(dtype='string'),
     'commit_message': Value(dtype='string'),
     'diff': Value(dtype='string')
@@ -88,8 +91,8 @@ new_column = [1] * len(dataset_patches)
 dataset_patches = dataset_patches.add_column("label", new_column)
 print(f"Number of patcing commits: {len(dataset_patches)}")
 
-# sort the dataset by owner and repo
-dataset_patches = dataset_patches.sort(column_names=['owner', 'repo'], reverse=False)
+# sort the dataset by repo
+dataset_patches = dataset_patches.sort(column_names=['repo'], reverse=False)
 
 
 memory = set()
@@ -107,18 +110,21 @@ print(f"Number of unique patcing commits: {len(dataset_patches)}")
 
 repos = {} # "repo_owner/repo_name" : count
 for commit in tqdm(dataset_patches):
-    repo_ident = commit['owner'] + "/" + commit['repo']
-    if repo_ident not in repos:
-        repos[repo_ident] = 0
-    repos[repo_ident] += 1
+    if commit['repo'] not in repos:
+        repos[commit['repo']] = 0
+    repos[commit['repo']] += 1
 
 
 train_index, test_index = split_numbers_from_dict(repos, percent_train=0.80, percent_test=0.20)
 test_index, validation_index = split_numbers_from_dict(test_index, percent_train=0.50, percent_test=0.50)
 
-train_dataset_patches = dataset_patches.filter(lambda x: (x["owner"] + "/" + x["repo"]) in train_index.keys(), num_proc=num_proc)
-test_dataset_patches = dataset_patches.filter(lambda x: (x["owner"] + "/" + x["repo"]) in test_index.keys(), num_proc=num_proc)
-val_dataset_patches = dataset_patches.filter(lambda x: (x["owner"] + "/" + x["repo"]) in validation_index.keys(), num_proc=num_proc)
+train_index_keys = train_index.keys()
+test_index_keys = test_index.keys()
+validation_index_keys = validation_index.keys()
+
+train_dataset_patches = dataset_patches.filter(lambda x: x["repo"] in train_index_keys, num_proc=num_proc)
+test_dataset_patches = dataset_patches.filter(lambda x: x["repo"] in test_index_keys, num_proc=num_proc)
+val_dataset_patches = dataset_patches.filter(lambda x: x["repo"] in validation_index_keys, num_proc=num_proc)
 
 
 ddict = DatasetDict({
@@ -127,7 +133,7 @@ ddict = DatasetDict({
     "validation": val_dataset_patches,
 })
 
-ddict.push_to_hub("fals3/cvevc", config_name="patches", private=False, max_shard_size="250MB")
+ddict.push_to_hub("fals3/cvevc_commits", config_name="patches", private=False, max_shard_size="250MB")
 
 
 
@@ -135,15 +141,33 @@ ddict.push_to_hub("fals3/cvevc", config_name="patches", private=False, max_shard
 # Load the dataset
 
 dataset_non_patches = Dataset.from_generator(generator=partial(jsonl_generator, "./output/commits_data.jsonl"), gen_kwargs={"shards": shards}, features=features, num_proc=num_proc)
+
+
+
+# Step 1: Compute char lengths in parallel
+def compute_length(example):
+    return {"diff_len": len(example["diff"]) if example["diff"] is not None else 0}
+ds_with_lengths = dataset_non_patches.map(
+    compute_length,
+    num_proc=num_proc,  # adjust to your CPU cores
+    remove_columns=[col for col in dataset_non_patches.column_names if col != "diff_len"]
+)
+lengths = np.array(ds_with_lengths["diff_len"], dtype=np.int32)
+percentile_95 = np.percentile(lengths, 95)
+print(f"95th percentile of diff char length: {percentile_95}")
+# Filter out commits with diff length greater than 95th percentile
+dataset_non_patches = dataset_non_patches.filter(lambda x: len(x["diff"]) <= percentile_95, num_proc=num_proc)
+
+
 new_column = [0] * len(dataset_non_patches)
 dataset_non_patches = dataset_non_patches.add_column("label", new_column)
 print(f"Number of non-patching commits: {len(dataset_non_patches)}")
 
-dataset_non_patches = dataset_non_patches.sort(column_names=['owner', 'repo'], reverse=False)
+dataset_non_patches = dataset_non_patches.sort(column_names=['repo'], reverse=False)
 
-train_dataset_non_patches = dataset_non_patches.filter(lambda x: (x["owner"] + "/" + x["repo"]) in train_index.keys(), num_proc=num_proc)
-test_dataset_non_patches = dataset_non_patches.filter(lambda x: (x["owner"] + "/" + x["repo"]) in test_index.keys(), num_proc=num_proc)
-val_dataset_non_patches = dataset_non_patches.filter(lambda x: (x["owner"] + "/" + x["repo"]) in validation_index.keys(), num_proc=num_proc)
+train_dataset_non_patches = dataset_non_patches.filter(lambda x: x["repo"] in train_index.keys(), num_proc=num_proc)
+test_dataset_non_patches = dataset_non_patches.filter(lambda x: x["repo"] in test_index.keys(), num_proc=num_proc)
+val_dataset_non_patches = dataset_non_patches.filter(lambda x: x["repo"] in validation_index.keys(), num_proc=num_proc)
 
 ddict = DatasetDict({
     "train": train_dataset_non_patches,
@@ -151,11 +175,11 @@ ddict = DatasetDict({
     "validation": val_dataset_non_patches,
 })
 
-ddict.push_to_hub("fals3/cvevc", config_name="non_patches", private=False, max_shard_size="250MB")
+ddict.push_to_hub("fals3/cvevc_commits", config_name="non_patches", private=False, max_shard_size="250MB")
 
 
 
-# Uplead meta.jsonl
+# Upload meta.jsonl
 from huggingface_hub import HfApi
 api = HfApi()
 api.upload_file(
