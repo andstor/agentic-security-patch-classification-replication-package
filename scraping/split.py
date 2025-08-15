@@ -16,7 +16,7 @@ num_proc = 20
 shards = [i for i in range(num_proc)]
 
 
-def jsonl_generator(file_path, num_handles=1, shards=[0]):
+def jsonl_generator(file_path, num_handles=1, max_len=None, shards=[0]):
     rank = shards[0]
     """Yield lines from a JSONL file as dictionaries."""
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -28,6 +28,8 @@ def jsonl_generator(file_path, num_handles=1, shards=[0]):
                     #encode commit message to utf-8
                     #data['diff'] = data['diff'].encode('utf-8', 'surrogateescape').decode('ISO-8859-1')
                     data['diff'] = data['diff'].encode('utf-8', "replace").decode('utf-8')
+                    if max_len is not None and len(data['diff']) > max_len:
+                        continue
                     # combine owner and repo into a single string
                     data['repo'] = data['owner'] + "/" + data['repo']
 
@@ -86,7 +88,7 @@ features = Features({
 
 
 
-dataset_patches = Dataset.from_generator(generator=partial(jsonl_generator, "./output/patches_data.jsonl"), gen_kwargs={"shards": shards}, features=features, num_proc=num_proc)
+dataset_patches = Dataset.from_generator(generator=partial(jsonl_generator, "./output/patches_data.jsonl", num_proc), gen_kwargs={"shards": shards}, features=features, num_proc=num_proc)
 new_column = [1] * len(dataset_patches)
 dataset_patches = dataset_patches.add_column("label", new_column)
 print(f"Number of patcing commits: {len(dataset_patches)}")
@@ -140,23 +142,24 @@ ddict.push_to_hub("fals3/cvevc_commits", config_name="patches", private=False, m
 # Non-patching commits
 # Load the dataset
 
-dataset_non_patches = Dataset.from_generator(generator=partial(jsonl_generator, "./output/commits_data.jsonl"), gen_kwargs={"shards": shards}, features=features, num_proc=num_proc)
 
+# Calculate the 95th percentile of diff lengths
+#diff_lengths = []
+#with open("./output/commits_data.jsonl", "r", encoding="utf-8") as f:
+#    for line in tqdm(f):
+#        try:
+#            data = json.loads(line)
+#            diff_lengths.append(len(data.get("diff", "")))
+#        except json.JSONDecodeError:
+#            continue  # skip broken lines
+#
+#p95 = np.percentile(diff_lengths, 95)
+#del diff_lengths  # free memory
+#print(f"95th percentile diff length: {p95}")
+p95 = 153993
 
+dataset_non_patches = Dataset.from_generator(generator=partial(jsonl_generator, "./output/commits_data.jsonl", num_proc, p95), gen_kwargs={"shards": shards}, features=features, num_proc=num_proc)
 
-# Step 1: Compute char lengths in parallel
-def compute_length(example):
-    return {"diff_len": len(example["diff"]) if example["diff"] is not None else 0}
-ds_with_lengths = dataset_non_patches.map(
-    compute_length,
-    num_proc=num_proc,  # adjust to your CPU cores
-    remove_columns=[col for col in dataset_non_patches.column_names if col != "diff_len"]
-)
-lengths = np.array(ds_with_lengths["diff_len"], dtype=np.int32)
-percentile_95 = np.percentile(lengths, 95)
-print(f"95th percentile of diff char length: {percentile_95}")
-# Filter out commits with diff length greater than 95th percentile
-dataset_non_patches = dataset_non_patches.filter(lambda x: len(x["diff"]) <= percentile_95, num_proc=num_proc)
 
 
 new_column = [0] * len(dataset_non_patches)
