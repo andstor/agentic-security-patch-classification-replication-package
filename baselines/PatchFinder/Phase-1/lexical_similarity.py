@@ -6,6 +6,21 @@ from functools import partial
 from tqdm import tqdm
 import os
 import pandas as pd
+import os
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from tqdm import tqdm
+import gc
+import multiprocessing as mp
+from tqdm import tqdm
+from datasets import load_dataset
+import polars as pl
+import pandas as pd
+import re
+
+
+
 
 mp_context = get_context('spawn')
 
@@ -16,13 +31,139 @@ DATA_DIR = '../../../data/baselines/PatchFinder'
 from pathlib import Path
 from typing import Generator, Dict
 
-def get_parquet_files_by_split(base_dir: Path = Path("tmp/owner_repo_groups")) -> Dict[str, Generator[Path, None, None]]:
-    """Return a dict mapping 'train', 'test', 'validation' to generators of .parquet file paths."""
-    splits = ["train", "test", "validation"]
-    return {
-        split: sorted((base_dir / split).glob("*.parquet"))
-        for split in splits
-    }
+
+import nltk
+nltk.download('punkt_tab')
+
+from nltk import word_tokenize
+
+
+
+
+import re
+
+def convert_to_unified_0(diff: str) -> str:
+    """
+    Takes a git diff string and returns a version equivalent to `git diff --unified=0`.
+    """
+    output_lines = []
+    diff_lines = diff.splitlines()
+    
+    inside_diff = False
+    
+    for line in diff_lines:
+        if line.startswith("diff --git") or line.startswith("index") or line.startswith("---") or line.startswith("+++"):
+            output_lines.append(line)
+        elif line.startswith("@@"):
+            inside_diff = True
+            # Extract hunk header and modify it to show 0 lines of context
+            match = re.match(r"@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@", line)
+            if match:
+                old_start, old_count, new_start, new_count = match.groups()
+                old_count = int(old_count) if old_count else 1
+                new_count = int(new_count) if new_count else 1
+                output_lines.append(f"@@ -{old_start},0 +{new_start},0 @@")
+            else:
+                output_lines.append(line)
+        elif inside_diff:
+            if line.startswith("+") or line.startswith("-"):
+                output_lines.append(line)
+        else:
+            output_lines.append(line)
+    
+    return "\n".join(output_lines)
+
+
+
+
+
+
+
+import re
+
+def format_git_show_minimal(git_show_string):
+    """
+    Robustly extracts diff content starting from the first '@@' line for each file, including the 'diff --git' line.
+
+    Args:
+        git_show_string: The git show diff string with potentially multiple file diffs.
+
+    Returns:
+        The extracted diff content, or an empty string if no diff is found.
+    """
+    lines = git_show_string.splitlines()
+    result_diffs = []
+    current_diff = []
+    at_at_found = False
+
+    for line in lines:
+        if line.startswith("diff --git"):
+            if current_diff:  # Store the previous diff if any
+                result_diffs.append("\n".join(current_diff))
+            current_diff = [line]  # Start a new diff
+            at_at_found = False
+        elif current_diff:
+            if line.startswith("@@"):
+                at_at_found = True
+                current_diff.append(line)
+            elif at_at_found:
+                current_diff.append(line)
+
+    if current_diff:  # Store the last diff
+        result_diffs.append("\n".join(current_diff))
+
+    return "\n".join(result_diffs).strip()
+
+
+
+
+
+def load_data(num_cpus=20):
+    import os
+    import json
+    import pandas as pd
+    from datasets import load_dataset
+
+    # Load CVE dataset
+    ds_cve = load_dataset('fals3/cvevc_cve')
+    ds_cve = ds_cve.map(lambda x: {"desc_token": ' '.join(word_tokenize(x["desc"]))}, batched=False, num_proc=num_cpus)
+
+    # Load patches dataset
+    ds_patches = load_dataset('fals3/cvevc_commits', "patches")
+    ds_patches = ds_patches.map(lambda x: {"diff_token": 
+                                               ' '.join(word_tokenize(
+                                                   ''.join(format_git_show_minimal(
+                                                       convert_to_unified_0(
+                                                           x["diff"]
+                                                       )
+                                                   ).splitlines(keepends=True)[:1000])
+                                               )),
+                                           "msg_token": ' '.join(word_tokenize(x["commit_message"]))
+                                          }, batched=False, num_proc=num_cpus)
+    ds_patches = ds_patches.remove_columns(["commit_message", "diff"])
+
+    # Load non-patches dataset
+    ds_nonpatches = load_dataset("fals3/cvevc_commits", "non_patches")
+    ds_nonpatches = ds_nonpatches.map(lambda x: {"diff_token": 
+                                                     ' '.join(word_tokenize(
+                                                         "".join(format_git_show_minimal(
+                                                             convert_to_unified_0(
+                                                                 x["diff"]
+                                                             )
+                                                         ).splitlines(keepends=True)[:1000])
+                                                     )),
+                                                 "msg_token": ' '.join(word_tokenize(x["commit_message"]))
+                                                }, batched=False, num_proc=num_cpus)
+    ds_nonpatches = ds_nonpatches.remove_columns(["commit_message", "diff"])
+    
+    # Load CVE to commit mappings
+    mapping_ds = load_dataset("fals3/cvevc_cve_commit_mappings", num_proc=num_cpus)
+    
+    return ds_cve, ds_patches, ds_nonpatches, mapping_ds
+
+
+
+
 
 # %%
 def compute_similarity(df):
@@ -107,58 +248,59 @@ def csv_writer_worker(writeq: Queue):
             continue  
             
 
-def data_producer(fileq: Queue, dfq: Queue, sem: BoundedSemaphore):
+def data_producer(dfq: Queue, sem: BoundedSemaphore):
     import queue
 
-    while True:
-        try:
-            item = fileq.get()
-            if item is None:
-                break
-            split, file = item
-            try:
-                cve_path = f"tmp/tokenized/cve_{split}.parquet"
-                patches_path = f"tmp/tokenized/patches_{split}.parquet"
+    ds_cve, ds_patches, ds_nonpatches, ds_mappings = load_data()
+    
+    for split in ["train", "test", "validation"]:
 
-                dsp_cve = pl.scan_parquet(cve_path)
-                dsp_patches = pl.scan_parquet(patches_path)
-                dsp_nonpatches = pl.scan_parquet(file)
+        # Index for commit_id lookup
+        cindex = {key: idx for idx, key in tqdm(enumerate(ds_cve[split]["cve"]), total=len(ds_cve[split]["cve"]), desc=f"Indexing CVEs {split}")}
+        pindex = {key: idx for idx, key in tqdm(enumerate(ds_patches[split]["commit_id"]), total=len(ds_patches[split]["commit_id"]), desc=f"Indexing patch commits {split}")}
+        npindex = {key: idx for idx, key in tqdm(enumerate(ds_nonpatches[split]["commit_id"]), total=len(ds_nonpatches[split]["commit_id"]), desc=f"Indexing non-patch commits {split}")}
+        cve_mappings = ds_mappings[split].to_pandas().groupby("cve")
+        
+        
+        def process_mapping(example):
+            cve = example["cve"]
+            commit_id = example["commit_id"]
+            label = example["label"] 
             
-                
-                dsp_cve_exploded = dsp_cve.explode("commits").rename({"commits": "commit_id"})
-                dsp_patches = ( # tmp join with patches to get owner, repo cols
-                    dsp_cve_exploded
-                    .join(dsp_patches, on="commit_id", how="inner")
-                )
-                dsp_cve = dsp_patches.select(["cve", "owner", "repo", "desc_token"]).unique(pl.col("cve")).collect()
-                dsp_patches = dsp_patches.select(['cve', 'owner', 'repo', 'commit_id', 'label', 'desc_token', 'msg_token', 'diff_token']).collect()
-                
-                
-                
-                ####
-                nonpatch_owner_repo = dsp_nonpatches.select(["owner", "repo"]).unique()
-                dsp_patches_filtered = (
-                    dsp_patches.lazy()
-                    .join(nonpatch_owner_repo, on=["owner", "repo"], how="inner")
-                    .select(["cve", "owner", "repo", "commit_id", "label", "desc_token", "msg_token", "diff_token"])
-                )
-                
-                
-                dsp_nonpatches_joined = ( # join with non-patch data
-                    dsp_cve.lazy()
-                    .join(dsp_nonpatches, on=["owner", "repo"], how="right")
-                    .select (['cve', 'owner', 'repo', 'commit_id', 'label', 'desc_token', 'msg_token', 'diff_token'])
-                )
-                
-                dsp_commits_lazy = pl.concat([dsp_patches_filtered, dsp_nonpatches_joined], how="vertical")
-                grouped = dsp_commits_lazy.collect().group_by("cve")
-                for _, group_df in constrained_iterator(sem, grouped):
-                    dfq.put((group_df, split))
+            cve_row = ds_cve[split][cindex[cve]]
+            
+            commit_row = None
+            if commit_id in pindex: # Patch commit
+                commit_row = ds_patches[split][pindex[commit_id]]
+            else: # Non-patch commit
+                commit_row = ds_nonpatches[split][npindex[commit_id]]
+            
+            if commit_row is not None:
+                return {
+                    "cve": cve,
+                    "repo": commit_row["repo"],
+                    "commit_id": commit_id,
+                    "label": label,
+                    "desc_token": cve_row["desc_token"],
+                    "msg_token": commit_row["msg_token"],
+                    "diff_token": commit_row["diff_token"]
+                }
+            else:
+                return None
+
+        for _, group_df in constrained_iterator(sem, cve_mappings):
+            try:
+                cve_df = group_df.apply(process_mapping, axis=1)
+                cve_df.dropna(inplace=True)
+                if cve_df.empty:
+                    sem.release()
+                    continue
+                dfq.put((cve_df, split))
             except Exception as e:
-                print(f"Error processing data (data_producer): {e}")
+                print(f"Error processing group DataFrame (data_producer): {e}")
+                sem.release()
                 continue
-        except queue.Empty:
-            continue    
+
 
 # %%
 import polars as pl
@@ -186,12 +328,14 @@ def similarity_worker(dfq: Queue, writeq: Queue, progressq: Queue, sem: BoundedS
             continue
 
 def main():
-
-    # Example usage
-    files_by_split = get_parquet_files_by_split()
-    for split, files in files_by_split.items():
-        print(f"{split}: {len(files)} files")
-
+    
+    
+    for split in ["train", "test", "validation"]:
+        # Create and write the header of the CSV file
+        empty_df = pd.DataFrame(columns=['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label'])
+        empty_df.to_csv(os.path.join(DATA_DIR, f'lexical_similarity_{split}.csv'), index=False)
+            
+    load_data() # Preload data to ensure all datasets are available. Subsequent calls to load_data() are cached.
 
     progressq = mp_context.Queue()
     progress_tracker = mp_context.Process(target=progress_tracker_worker, args=(progressq,))
@@ -211,11 +355,10 @@ def main():
     MAX_CVES = 50
 
     sem = mp_context.BoundedSemaphore(MAX_CVES) # the peak number of processed groups.
-    fileq = mp_context.Queue() # commits data
     dfq = mp_context.Queue()
 
     data_producer_workers = [
-        mp_context.Process(target=data_producer, args=(fileq, dfq, sem), daemon=True)
+        mp_context.Process(target=data_producer, args=(dfq, sem), daemon=True)
         for _ in range(LOADING_JOBS)
     ]
     for p in data_producer_workers:
@@ -233,21 +376,6 @@ def main():
         p.start()
 
     # %%
-
-    files_by_split = get_parquet_files_by_split()
-    for split in files_by_split.keys():
-
-        # Create and write the header of the CSV file
-        empty_df = pd.DataFrame(columns=['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label'])
-        empty_df.to_csv(os.path.join(DATA_DIR, f'lexical_similarity_{split}.csv'), index=False)
-            
-        
-        for file in files_by_split[split]:
-            fileq.put((split, file))
-
-    # %%
-    for _ in range(LOADING_JOBS):
-        fileq.put(None)
     for p in data_producer_workers:
         p.join()
 
