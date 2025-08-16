@@ -119,24 +119,24 @@ def format_git_show_minimal(git_show_string):
 
 # %%
 def compute_similarity(df):
-    import polars as pl
     import pandas as pd
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
 
-    df = df.with_columns(
-        pl.col("desc_token").fill_null(''),
-        pl.col("msg_token").fill_null(''),
-        pl.col("diff_token").fill_null(''),
-    ).with_columns(
-        pl.concat_str([pl.col("msg_token"), pl.col("diff_token")], separator=" ").fill_null('').alias("combined")
-    )
+    
+    # Fill NaNs
+    df["desc_token"] = df["desc_token"].fillna("")
+    df["msg_token"] = df["msg_token"].fillna("")
+    df["diff_token"] = df["diff_token"].fillna("")
+
+    # Build combined field
+    df["combined"] = df["msg_token"] + " " + df["diff_token"]
     
     vectorizer = TfidfVectorizer()
     vectorizer.fit(df['combined'])
 
     similarity_scores = []
-    for row in df.iter_rows(named=True):
+    for _, row in df.iterrows():
         desc_tfidf = vectorizer.transform([row['desc_token']])
         combined_tfidf = vectorizer.transform([row['combined']])
         similarity = cosine_similarity(desc_tfidf, combined_tfidf).diagonal()[0]
