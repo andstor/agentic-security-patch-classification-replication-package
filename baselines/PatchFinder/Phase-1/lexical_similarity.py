@@ -117,54 +117,6 @@ def format_git_show_minimal(git_show_string):
 
 
 
-
-def load_data(num_cpus=20):
-    import os
-    import json
-    import pandas as pd
-    from datasets import load_dataset
-
-    # Load CVE dataset
-    ds_cve = load_dataset('fals3/cvevc_cve')
-    ds_cve = ds_cve.map(lambda x: {"desc_token": ' '.join(word_tokenize(x["desc"]))}, batched=False, num_proc=num_cpus)
-
-    # Load patches dataset
-    ds_patches = load_dataset('fals3/cvevc_commits', "patches")
-    ds_patches = ds_patches.map(lambda x: {"diff_token": 
-                                               ' '.join(word_tokenize(
-                                                   ''.join(format_git_show_minimal(
-                                                       convert_to_unified_0(
-                                                           x["diff"]
-                                                       )
-                                                   ).splitlines(keepends=True)[:1000])
-                                               )),
-                                           "msg_token": ' '.join(word_tokenize(x["commit_message"]))
-                                          }, batched=False, num_proc=num_cpus)
-    ds_patches = ds_patches.remove_columns(["commit_message", "diff"])
-
-    # Load non-patches dataset
-    ds_nonpatches = load_dataset("fals3/cvevc_commits", "non_patches")
-    ds_nonpatches = ds_nonpatches.map(lambda x: {"diff_token": 
-                                                     ' '.join(word_tokenize(
-                                                         "".join(format_git_show_minimal(
-                                                             convert_to_unified_0(
-                                                                 x["diff"]
-                                                             )
-                                                         ).splitlines(keepends=True)[:1000])
-                                                     )),
-                                                 "msg_token": ' '.join(word_tokenize(x["commit_message"]))
-                                                }, batched=False, num_proc=num_cpus)
-    ds_nonpatches = ds_nonpatches.remove_columns(["commit_message", "diff"])
-    
-    # Load CVE to commit mappings
-    mapping_ds = load_dataset("fals3/cvevc_cve_commit_mappings", num_proc=num_cpus)
-    
-    return ds_cve, ds_patches, ds_nonpatches, mapping_ds
-
-
-
-
-
 # %%
 def compute_similarity(df):
     import polars as pl
@@ -213,12 +165,11 @@ def constrained_iterator(sem: BoundedSemaphore, data: iter):
 def progress_tracker_worker(progressq: Queue):
     from tqdm import tqdm
     #total = 0
-    #for split in ["train", "test", "validation"]:
-    #    cve_path = f".tmp/tokenized/cve_{split}.parquet"
-    #    count = pl.scan_parquet(cve_path).collect().shape[0]
-    #    total += count
+    #ds_cve = load_dataset('fals3/cvevc_cve')
+    #for split in ds_cve:
+    #    total += len(ds_cve[split])
     
-    pbar = tqdm(desc="Processed CVE groups", total=11943, dynamic_ncols=True)
+    pbar = tqdm(desc="Processed CVE groups", total=11936, dynamic_ncols=True)
     while True:
         item = progressq.get()
         if item is None:
@@ -249,9 +200,13 @@ def csv_writer_worker(writeq: Queue):
 
 def data_producer(dfq: Queue, sem: BoundedSemaphore):
     import queue
+    from datasets import load_from_disk, load_dataset
 
-    ds_cve, ds_patches, ds_nonpatches, ds_mappings = load_data()
-    
+    ds_cve = load_from_disk("tmp/ds_cve")
+    ds_patches = load_from_disk("tmp/ds_patches")
+    ds_nonpatches = load_from_disk("tmp/ds_nonpatches")
+    ds_mappings = load_dataset("fals3/cvevc_cve_commit_mappings")
+
     for split in ["train", "test", "validation"]:
 
         # Index for commit_id lookup
@@ -334,7 +289,6 @@ def main():
         empty_df = pd.DataFrame(columns=['cve', 'repo', 'commit_id', 'similarity', 'label'])
         empty_df.to_csv(os.path.join(DATA_DIR, f'lexical_similarity_{split}.csv'), index=False)
             
-    load_data() # Preload data to ensure all datasets are available. Subsequent calls to load_data() are cached.
 
     progressq = mp_context.Queue()
     progress_tracker = mp_context.Process(target=progress_tracker_worker, args=(progressq,))
