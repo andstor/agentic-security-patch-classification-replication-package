@@ -304,7 +304,7 @@ def main():
     # %%
 
 
-    LOADING_JOBS = 11 # MAX amount of files in memory
+    LOADING_JOBS = 6 # MAX amount of files in memory
     MAX_CVES = 50
 
     sem = mp_context.BoundedSemaphore(MAX_CVES) # the peak number of processed groups.
@@ -319,7 +319,7 @@ def main():
 
     # %%
 
-    PROCESSING_JOBS = 11
+    PROCESSING_JOBS = 12
 
     similarity_workers = [
         mp_context.Process(target=similarity_worker, args=(dfq, writeq, progressq, sem), daemon=True)
