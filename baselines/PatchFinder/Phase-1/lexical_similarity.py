@@ -192,7 +192,6 @@ def compute_similarity(df):
 
     similarity_data = pd.DataFrame()
     similarity_data['cve'] = df['cve']
-    similarity_data['owner'] = df['owner']
     similarity_data['repo'] = df['repo']
     similarity_data['commit_id'] = df['commit_id']
     similarity_data['similarity'] = similarity_scores
@@ -332,7 +331,7 @@ def main():
     
     for split in ["train", "test", "validation"]:
         # Create and write the header of the CSV file
-        empty_df = pd.DataFrame(columns=['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label'])
+        empty_df = pd.DataFrame(columns=['cve', 'repo', 'commit_id', 'similarity', 'label'])
         empty_df.to_csv(os.path.join(DATA_DIR, f'lexical_similarity_{split}.csv'), index=False)
             
     load_data() # Preload data to ensure all datasets are available. Subsequent calls to load_data() are cached.
