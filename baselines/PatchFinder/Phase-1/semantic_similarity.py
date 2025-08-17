@@ -21,7 +21,7 @@ from typing import Generator, Dict
 
 
 # %%
-def compute_similarity(df, device_id):
+def compute_similarity(df, device_id, batch_size):
     import polars as pl
     import pandas as pd
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -37,7 +37,7 @@ def compute_similarity(df, device_id):
     
     
     similarity_scores = score(cands=df['combined'].to_list(), refs=df['desc_token'].to_list(),
-                              model_type='microsoft/codereviewer', batch_size=1024, device=f"cuda:{device_id}")
+                              model_type='microsoft/codereviewer', batch_size=batch_size, device=f"cuda:{device_id}")
 
     similarity_data = pd.DataFrame()
     similarity_data['cve'] = df['cve']
@@ -161,7 +161,7 @@ def data_producer(dfq: Queue, sem: BoundedSemaphore, worker_id: int, num_workers
 # %%
 import polars as pl
 
-def similarity_worker(dfq: Queue, writeq: Queue, progressq: Queue, sem: BoundedSemaphore, device_id: int):   
+def similarity_worker(dfq: Queue, writeq: Queue, progressq: Queue, sem: BoundedSemaphore, device_id: int, batch_size: int):   
     import queue
 
     while True:
@@ -171,7 +171,7 @@ def similarity_worker(dfq: Queue, writeq: Queue, progressq: Queue, sem: BoundedS
                 break
             df, split = item
             try:
-                result = compute_similarity(df, device_id)
+                result = compute_similarity(df, device_id, batch_size)
                 writeq.put((result, split))
                 progressq.put(1)  # signal 1 group done
 
@@ -223,7 +223,7 @@ def main(args):
     for device_id in device_ids:
         p = mp_context.Process(
             target=similarity_worker,
-            args=(dfq, writeq, progressq, sem, device_id),
+            args=(dfq, writeq, progressq, sem, device_id, args.batch_size),
             daemon=True
         )
         similarity_workers.append(p)
@@ -256,8 +256,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Compute semantic similarity for CVE-commit dataset.")
     parser.add_argument("--data_dir", type=str, default='../../../data/baselines/PatchFinder', help="Output directory for semantic similarity CSVs")
     parser.add_argument("--loading_jobs", type=int, default=6, help="Number of data loading processes")
-    parser.add_argument("--processing_jobs", type=int, default=12, help="Number of similarity worker processes")
+    parser.add_argument("--processing_jobs", type=int, default=1, help="Number of similarity worker (GPU) processes")
     parser.add_argument("--max_cves", type=int, default=50, help="Maximum number of preloaded CVEs in memory")
+    parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for BERTScore computation")
     return parser.parse_args()
 
 
