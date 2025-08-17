@@ -68,7 +68,7 @@ def progress_tracker_worker(progressq: Queue):
     #for split in ds_cve:
     #    total += len(ds_cve[split])
     
-    pbar = tqdm(desc="Processed CVE groups", total=11936, dynamic_ncols=True)
+    pbar = tqdm(desc="Processed CVE groups", total=10874, dynamic_ncols=True)
     while True:
         item = progressq.get()
         if item is None:
