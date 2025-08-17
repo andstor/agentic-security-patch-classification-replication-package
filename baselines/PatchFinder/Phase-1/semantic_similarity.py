@@ -27,13 +27,13 @@ def compute_similarity(df, device_id):
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
 
-    df = df.with_columns(
-        pl.col("desc_token").fill_null(''),
-        pl.col("msg_token").fill_null(''),
-        pl.col("diff_token").fill_null(''),
-    ).with_columns(
-        pl.concat_str([pl.col("msg_token"), pl.col("diff_token")], separator=" ").fill_null('').alias("combined")
-    )
+    # Fill NaNs
+    df["desc_token"] = df["desc_token"].fillna("")
+    df["msg_token"] = df["msg_token"].fillna("")
+    df["diff_token"] = df["diff_token"].fillna("")
+
+    # Build combined field
+    df["combined"] = df["msg_token"] + " " + df["diff_token"]
     
     
     similarity_scores = score(cands=df['combined'].to_list(), refs=df['desc_token'].to_list(),
@@ -94,9 +94,11 @@ def csv_writer_worker(writeq: Queue):
                 print(f"Error writing data: {e}")
         except queue.Empty:
             continue  
-            
 
-def data_producer(dfq: Queue, sem: BoundedSemaphore):
+def owns(cve, worker_id, num_workers):
+    return hash(cve) % num_workers == worker_id
+
+def data_producer(dfq: Queue, sem: BoundedSemaphore, worker_id: int, num_workers: int):
     import queue
     from datasets import load_from_disk, load_dataset
 
@@ -140,9 +142,12 @@ def data_producer(dfq: Queue, sem: BoundedSemaphore):
             else:
                 return None
 
-        for _, group_df in constrained_iterator(sem, cve_mappings):
+        for cve, group_df in constrained_iterator(sem, cve_mappings):
+            if not owns(cve, worker_id, num_workers): # Load balancing
+                sem.release()
+                continue
             try:
-                cve_df = group_df.apply(process_mapping, axis=1)
+                cve_df = group_df.apply(process_mapping, axis=1, result_type='expand')
                 cve_df.dropna(inplace=True)
                 if cve_df.empty:
                     sem.release()
@@ -178,14 +183,13 @@ def similarity_worker(dfq: Queue, writeq: Queue, progressq: Queue, sem: BoundedS
         except queue.Empty:
             continue
 
-def main():
+def main(args):
 
     
     for split in ["train", "test", "validation"]:
         # Create and write the header of the CSV file
         empty_df = pd.DataFrame(columns=['cve', 'repo', 'commit_id', 'label', 'recall', 'precision', 'f1'])
-        empty_df.to_csv(os.path.join(DATA_DIR, f'semantic_similarity_{split}.csv'), index=False)
-            
+        empty_df.to_csv(os.path.join(args.data_dir, f'semantic_similarity_{split}.csv'), index=False)
 
     progressq = mp_context.Queue()
     progress_tracker = mp_context.Process(target=progress_tracker_worker, args=(progressq,))
@@ -195,29 +199,25 @@ def main():
 
     # Number of shards (write processes)
     writeq = mp_context.Queue()
-    csv_writer = mp_context.Process(target=csv_writer_worker, args=(writeq,))
+    csv_writer = mp_context.Process(target=csv_writer_worker, args=(writeq, args.data_dir))
     csv_writer.start()
 
     # %%
 
 
-    LOADING_JOBS = 4 # MAX amount of files in memory
-    MAX_CVES = 50
-
-    sem = mp_context.BoundedSemaphore(MAX_CVES) # the peak number of processed groups.
+    sem = mp_context.BoundedSemaphore(args.max_cves) # the peak number of processed groups.
     dfq = mp_context.Queue()
 
     data_producer_workers = [
-        mp_context.Process(target=data_producer, args=(dfq, sem), daemon=True)
-        for _ in range(LOADING_JOBS)
+        mp_context.Process(target=data_producer, args=(dfq, sem, i, args.loading_jobs), daemon=True)
+        for i in range(args.loading_jobs)
     ]
     for p in data_producer_workers:
         p.start()
 
     # %%
 
-    PROCESSING_JOBS = 8 # Num GPUs
-    device_ids = list(range(PROCESSING_JOBS))
+    device_ids = list(range(args.processing_jobs))
 
     similarity_workers = []
     for device_id in device_ids:
@@ -230,13 +230,12 @@ def main():
     for p in similarity_workers:
         p.start()
 
-    # %%
 
     # %%
     for p in data_producer_workers:
         p.join()
 
-    for _ in range(PROCESSING_JOBS):
+    for _ in range(args.processing_jobs):
         dfq.put(None)
     for p in similarity_workers:
         p.join()
@@ -251,5 +250,17 @@ def main():
     csv_writer.join()
 
 
+
+import argparse
+def parse_args():
+    parser = argparse.ArgumentParser(description="Compute semantic similarity for CVE-commit dataset.")
+    parser.add_argument("--data_dir", type=str, default='../../../data/baselines/PatchFinder', help="Output directory for semantic similarity CSVs")
+    parser.add_argument("--loading_jobs", type=int, default=6, help="Number of data loading processes")
+    parser.add_argument("--processing_jobs", type=int, default=12, help="Number of similarity worker processes")
+    parser.add_argument("--max_cves", type=int, default=50, help="Maximum number of preloaded CVEs in memory")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)
