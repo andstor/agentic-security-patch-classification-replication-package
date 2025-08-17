@@ -12,8 +12,6 @@ from bert_score import score, plot_example
 
 mp_context = get_context('spawn')
 
-# %%
-DATA_DIR = '../../../data/baselines/PatchFinder'
 
 # %%
 from pathlib import Path
@@ -77,7 +75,8 @@ def progress_tracker_worker(progressq: Queue):
         
 # %%
 # Worker to write data into different shard files
-def csv_writer_worker(writeq: Queue):
+def csv_writer_worker(writeq: Queue, data_dir: str):
+    import queue
     while True:
         try:
             item = writeq.get()
@@ -88,7 +87,7 @@ def csv_writer_worker(writeq: Queue):
                 # Get data and its respective file from the queue
                 data, file_suffix = item
                 # Write data to the respective shard CSV file
-                file_path = os.path.join(DATA_DIR, f'semantic_similarity_{file_suffix}.csv')
+                file_path = os.path.join(data_dir, f'semantic_similarity_{file_suffix}.csv')
                 data.to_csv(file_path, mode='a', header=False, index=False)
             except Exception as e:
                 print(f"Error writing data: {e}")
