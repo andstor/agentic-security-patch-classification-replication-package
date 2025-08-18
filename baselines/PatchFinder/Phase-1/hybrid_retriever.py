@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from datasets import load_from_disk, load_dataset
 
 
 
@@ -74,16 +75,22 @@ def main():
     λ = 1# grid_search(df)
 
 
-    # read file
+    ds_cve = load_from_disk("tmp/ds_cve")
+    ds_patches = load_from_disk("tmp/ds_patches")
+    ds_nonpatches = load_from_disk("tmp/ds_nonpatches")
     
     for split in tqdm(['train', 'test', 'validation'], desc="Processing splits", dynamic_ncols=True):
+        cindex = {key: idx for idx, key in tqdm(enumerate(ds_cve[split]["cve"]), total=len(ds_cve[split]["cve"]), desc=f"Indexing CVEs {split}")}
+        pindex = {key: idx for idx, key in tqdm(enumerate(ds_patches[split]["commit_id"]), total=len(ds_patches[split]["commit_id"]), desc=f"Indexing patch commits {split}")}
+        npindex = {key: idx for idx, key in tqdm(enumerate(ds_nonpatches[split]["commit_id"]), total=len(ds_nonpatches[split]["commit_id"]), desc=f"Indexing non-patch commits {split}")}
+        
         
         lexical_similarity_df = pl.read_csv(os.path.join(DATA_DIR, f'lexical_similarity_{split}.csv'))
         semantic_similarity_df = pl.read_csv(os.path.join(DATA_DIR, f'semantic_similarity_{split}.csv'))
 
         merged_df = lexical_similarity_df.join(
             semantic_similarity_df,
-            on=['commit_id','cve','owner','repo', 'label'],
+            on=['commit_id', 'cve' ,'repo', 'label'],
             how='inner',
         )
 
@@ -101,7 +108,7 @@ def main():
         )
 
         # Save data for metrics
-        ranked_df.select(['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'recall', 'precision', 'f1', 'fused_f1']).to_pandas().to_csv(os.path.join(DATA_DIR, f'hybrid_similarity_{split}.csv'))
+        ranked_df.select(['cve', 'repo', 'commit_id', 'similarity', 'label', 'recall', 'precision', 'f1', 'fused_f1']).to_pandas().to_csv(os.path.join(DATA_DIR, f'hybrid_similarity_{split}.csv'))
 
         
         ranked_top100_df = (
@@ -122,30 +129,48 @@ def main():
 
         # Create and write the header of the CSV file
 
-        empty_df = pd.DataFrame(columns=['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'desc_token', 'msg_token', 'diff_token', 'recall', 'precision', 'f1', 'fused_f1'])
+        empty_df = pd.DataFrame(columns=['cve', 'repo', 'commit_id', 'similarity', 'label', 'desc_token', 'msg_token', 'diff_token', 'recall', 'precision', 'f1', 'fused_f1'])
         empty_df.to_csv(os.path.join(DATA_DIR, f'top100_{split}.csv'), index=False)
 
 
-        cve_path = f"tmp/tokenized/cve_{split}.parquet"
-        patches_path = f"tmp/tokenized/patches_{split}.parquet"
-        nonpatches_path = f"tmp/owner_repo_groups/{split}"
 
-        cve_df = pl.scan_parquet(cve_path)
-        patches_df = pl.scan_parquet(patches_path)
+        def assemble_row(example):
+            cve = example["cve"]
+            commit_id = example["commit_id"]
+            
+            cve_row = ds_cve[split][cindex[cve]]
+            
+            commit_row = None
+            if commit_id in pindex: # Patch commit
+                commit_row = ds_patches[split][pindex[commit_id]]
+            else: # Non-patch commit
+                commit_row = ds_nonpatches[split][npindex[commit_id]]
+            
+            if commit_row is not None:
+                return {
+                    "cve": cve,
+                    "repo": commit_row["repo"],
+                    "commit_id": commit_id,
+                    "similarity": example["similarity"],
+                    "label": example["label"],
+                    "desc_token": cve_row["desc_token"],
+                    "msg_token": commit_row["msg_token"],
+                    "diff_token": commit_row["diff_token"],
+                    "recall": example["recall"],
+                    "precision": example["precision"],
+                    "f1": example["f1"],
+                    "fused_f1": example["fused_f1"]
+                }
+            else:
+                return None
 
-        for cve, df in  tqdm(ranked_top100_df.group_by("cve"), desc="Processing CVE groups", total=ranked_top100_df.select(pl.col("cve")).unique().height, dynamic_ncols=True):
-            owner_repo_name = df[0]['owner'].item() + "_" + df[0]['repo'].item() # File name key
-            nonpatches_df = pl.scan_parquet(os.path.join(nonpatches_path, f"{owner_repo_name}.parquet"))
-            commits_df = pl.concat([patches_df, nonpatches_df], how="vertical")
-            data = (
-                df.lazy()
-                .join(cve_df, on=['cve'], how='left')
-                .join(commits_df, on=['commit_id'], how='left')
-                .select(['cve', 'owner', 'repo', 'commit_id', 'similarity', 'label', 'desc_token', 'msg_token', 'diff_token', 'recall', 'precision', 'f1', 'fused_f1'])
-            )
-
+        #'cve', 'repo', 'commit_id', 'similarity', 'label', 'recall', 'precision', 'f1', 'fused_f1'
+        for cve, group_df in tqdm(ranked_top100_df.group_by("cve"), desc="Processing CVE groups", total=ranked_top100_df.select(pl.col("cve")).unique().height, dynamic_ncols=True):
+            
+            cve_df = group_df.apply(assemble_row, axis=1, result_type='expand')
+            
             file_path = os.path.join(DATA_DIR, f'top100_{split}.csv')
-            data.collect().to_pandas().to_csv(file_path, mode='a', header=False, index=False)
+            cve_df.to_csv(file_path, mode='a', header=False, index=False)
         print(f"Data written to {file_path} for split {split}")
         
 
