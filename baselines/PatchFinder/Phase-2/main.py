@@ -97,7 +97,7 @@ if __name__ == '__main__':
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     
-    CHECK_POINTS_PATH = "./output/all/Checkpoints"
+    CHECK_POINTS_PATH = "./output/checkpoints"
 
     os.makedirs(CHECK_POINTS_PATH, exist_ok=True)
 
