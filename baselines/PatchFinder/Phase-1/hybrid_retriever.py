@@ -165,8 +165,7 @@ def main():
                 return None
 
         #'cve', 'repo', 'commit_id', 'similarity', 'label', 'recall', 'precision', 'f1', 'fused_f1'
-        for cve, group_df in tqdm(ranked_top100_df.group_by("cve"), desc="Processing CVE groups", total=ranked_top100_df.select(pl.col("cve")).unique().height, dynamic_ncols=True):
-            
+        for cve, group_df in tqdm(ranked_top100_df.to_pandas().groupby("cve"), desc="Processing CVE groups", total=ranked_top100_df.select(pl.col("cve")).unique().height, dynamic_ncols=True):
             cve_df = group_df.apply(assemble_row, axis=1, result_type='expand')
             
             file_path = os.path.join(DATA_DIR, f'top100_{split}.csv')
