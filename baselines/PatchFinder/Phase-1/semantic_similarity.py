@@ -66,7 +66,7 @@ def progress_tracker_worker(progressq: Queue):
     #for split in ds_cve:
     #    total += len(ds_cve[split])
     
-    pbar = tqdm(desc="Processed CVE groups", total=10874, dynamic_ncols=True)
+    pbar = tqdm(desc="Processed CVE groups", total=11936, dynamic_ncols=True)
     while True:
         item = progressq.get()
         if item is None:
@@ -94,8 +94,11 @@ def csv_writer_worker(writeq: Queue, data_dir: str):
         except queue.Empty:
             continue  
 
+
+import hashlib
 def owns(cve, worker_id, num_workers):
-    return hash(cve) % num_workers == worker_id
+    h = int(hashlib.md5(cve.encode("utf-8")).hexdigest(), 16)
+    return h % num_workers == worker_id
 
 def data_producer(dfq: Queue, sem: BoundedSemaphore, worker_id: int, num_workers: int):
     import queue
