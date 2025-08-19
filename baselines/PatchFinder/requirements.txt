@@ -2,6 +2,9 @@ pytz
 pandas
 pytorch_lightning
 transformers
+wandb
+tensorboard
+scikit-learn
 
 torch>=1.0.0
 git+https://github.com/MarkLee131/CR_score.git@29210c19d6e7f1a8dce229cc145832ea09da7d60
