@@ -85,7 +85,9 @@ if __name__ == '__main__':
     from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
     import os
 
+    from pytorch_lightning.loggers import TensorBoardLogger
 
+    tb_logger = TensorBoardLogger(save_dir="logs/")
     wandb_logger = WandbLogger(project='PatchFinder')
     # for early stopping, see https://pytorch-lightning.readthedocs.io/en/1.0.0/early_stopping.html?highlight=early%20stopping
     early_stop_callback = EarlyStopping(
@@ -118,7 +120,7 @@ if __name__ == '__main__':
         num_nodes=1,                          # Using 1 machine/node
         devices=len(configs.gpus),                            # Using 4 GPUs
         default_root_dir=CHECK_POINTS_PATH,   # Default checkpoint path
-        logger=wandb_logger,
+        logger=[wandb_logger, tb_logger],
         max_epochs=20,                        # Set the maximum number of epochs
         accumulate_grad_batches=1,           # Gradient accumulation steps
         max_steps=100000,                     # Set the maximum number of training steps
