@@ -1,3 +1,16 @@
-GitPython
+python-dotenv
+GitPython==3.1.44
+#git==4.0.12
 tqdm
 datasets
+polars
+
+openai==1.100.2
+smolagents==1.21.2
+
+# Telemetry
+#arize-phoenix==11.24.1
+opentelemetry-sdk==1.36.0
+opentelemetry-exporter-otlp==1.36.0
+#openinference-instrumentation-smolagents==0.1.15
+openinference-instrumentation-smolagents @ git+https://github.com/Arize-ai/openinference.git@refs/pull/2059/head#subdirectory=python/instrumentation/openinference-instrumentation-smolagents
