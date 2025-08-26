@@ -27,8 +27,8 @@ class CodeSearchTool(Tool):
     def forward(self, query: str, file: Optional[str] = None):
         try:
             # Perform the search using git grep
-            res = self.repo.git.grep("-n", query, file)
-            
+            res = self.repo.git.grep("-n", "-F", query, file)
+
             # If more than 50 files are found, return a message asking to be more specific
             if len(res.split("\n")) > 100:
                 return "Too many results found. Please be more specific."

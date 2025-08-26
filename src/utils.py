@@ -1,5 +1,9 @@
 from git import RemoteProgress
 from tqdm import tqdm
+import os
+import random
+import re
+import shutil  # Import shutil for deleting directories
 
 class CloneProgress(RemoteProgress):
     def __init__(self):
@@ -27,7 +31,6 @@ class CloneProgress(RemoteProgress):
         self.pbar.refresh()
 
 
-import random
 
 def pick_random_commits(repo, num_commits, seed=None):
     """
@@ -144,7 +147,6 @@ def get_commit_info(commit):
     return "\n".join(output)
 
 
-import re
 
 def extract_commit_hash(input_string):
     """
@@ -159,3 +161,36 @@ def extract_commit_hash(input_string):
     pattern = r"\b[a-fA-F0-9]{40}\b"  # Regex for a 40-character hexadecimal hash
     match = re.search(pattern, input_string)
     return match.group(0) if match else None
+
+
+
+
+
+
+
+def delete_subfolder_safely(folder_to_delete, expected_parent_folder):
+    """
+    Safely deletes a folder, ensuring it is a subfolder of a specified parent folder.
+
+    Args:
+        folder_to_delete (str): The path to the folder to be deleted.
+        expected_parent_folder (str): The path to the expected parent folder.
+
+    Returns:
+        bool: True if deletion succeeded, False otherwise.
+    """
+    abs_folder_to_delete = os.path.realpath(folder_to_delete)
+    abs_expected_parent_folder = os.path.realpath(expected_parent_folder)
+
+    if os.path.commonpath([abs_folder_to_delete, abs_expected_parent_folder]) == abs_expected_parent_folder:
+        try:
+            shutil.rmtree(abs_folder_to_delete)
+            #print(f"Successfully deleted: {abs_folder_to_delete}")
+            return True
+        except Exception as e:
+            #print(f"Error deleting {abs_folder_to_delete}: {e}")
+            return False
+    else:
+        #print(f"Error: {abs_folder_to_delete} is not a subfolder of {abs_expected_parent_folder}. Deletion aborted.")
+        return False
+

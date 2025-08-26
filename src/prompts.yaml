@@ -1,0 +1,106 @@
+
+task_prompt: |-
+  ## Task Overview
+
+  You are tasked with determining whether the commit `{{commit_id}}` in the repository `{{repository}}` is the actual patch for the vulnerability identified as `{{cve_id}}`.
+
+  ## Code Changes (from `git show` for `{{commit_id}}`):
+  ```diff
+  {{commit_diff}}
+  ```
+
+  You have access to the full codebase at the parent commit of `{{commit_id}}`. Use all available tools at your disposal to analyze the codebase—such as searching files, reading file contents, navigating function definitions, and locating usage patterns.
+
+  ---
+
+  ## 1. Understand the Vulnerability (`{{cve_id}}`)
+
+  Begin by retrieving and then carefully reviewing the official CVE report for `{{cve_id}}`. The report is your primary source of truth about the nature of the vulnerability. Take the time to read it thoroughly and ensure you understand the context and scope of the issue it describes.
+
+  ### 1.1 Identify Affected Components
+
+  Determine which parts of the system the vulnerability impacts. This may include specific modules, source files, classes, functions, or configuration layers. Understanding what is affected will help guide your investigation into whether the commit addresses these areas.
+
+  ### 1.2 Understand the Symptoms and Impact
+
+  Extract a clear description of what the vulnerability causes when exploited. What is the practical impact? This might include things like privilege escalation, denial of service, authentication bypass, memory corruption, or information disclosure.
+
+  ### 1.3 Analyze Entry Points
+
+  Identify how the vulnerability is triggered. This could be a specific API call, input vector (e.g., HTTP request, user input), or usage pattern. Understanding this helps in locating where and how the system is exposed.
+
+  ### 1.4 Determine the Root Cause
+
+  Look for the underlying flaw in logic, data handling, or assumptions that made the vulnerability possible. Common root causes include missing input validation, unsafe memory operations, race conditions, improper access control, or insecure default configurations.
+
+  ### 1.5 Optional: Use CWE Classification
+
+  If available, use the CVE-to-CWE mapping to categorize the vulnerability into a known class (e.g., buffer overflow, SQL injection, use-after-free). This may give you additional guidance on what kind of fixes to expect in the code.
+
+  ---
+
+  ## 2. Analyze the Commit Changes
+
+  Next, examine the code changes introduced by the commit `{{commit_id}}`. This will help you form a hypothesis about what the commit is doing and whether it is related to the CVE.
+
+  ### 2.1 Identify Scope of Changes
+
+  Go through the diff and identify what files, functions, methods, classes, constants, or configuration entries have been changed. Pay attention to whether these components overlap with those described in the CVE.
+
+  ### 2.2 Understand the Purpose of Each Change
+
+  Interpret each change carefully. What is the modification doing? Is it fixing a logic bug, adding input validation, tightening access controls, changing types, or restructuring control flow? Make sure you understand the *intended effect* of each code modification.
+
+  ### 2.3 Map Changes to the CVE Description
+
+  Attempt to directly associate each code change with some aspect of the CVE you reviewed in step 1. Does a new check correspond to a missing validation? Does the removal of a function correlate with the described insecure behavior? If a change cannot be tied back to the CVE, be cautious about assuming relevance.
+
+  ---
+
+  ## 3. Correlate Code Changes with the CVE
+
+  This step is the most critical: you must rigorously validate whether the commit actually addresses and fixes the vulnerability described in the CVE.
+
+  ### 3.1 Evaluate Direct Fixes
+
+  Determine whether the changes mitigate or eliminate the vulnerable behavior. Does the new code prevent the exploit from occurring via the same entry point? Does it neutralize the root cause? Look for structural corrections that align with the vulnerability's nature.
+
+  ### 3.2 Trace Usage and Context
+
+  Investigate how the modified code is used across the repository. Trace function calls, variable usage, and related logic paths. Make sure that the new behavior propagates correctly and consistently throughout the codebase and that it plausibly fixes the described issue.
+
+  ### 3.3 Confirm Against Symptoms and Entry Points
+
+  Verify that the changes prevent the previously identified symptoms from occurring under the same conditions. Use the same entry points and see if the new logic would block or mitigate the attack path.
+
+  ---
+
+  ## Common Mistakes to Avoid
+
+  Your task is to **verify**, not speculate. Any unjustified assumption is grounds for failure. Do not conclude that a commit is related to a CVE merely because it modifies the same file or function; superficial associations are not sufficient. Similarly, a CVE mention in a commit message does not guarantee that the commit implements a valid fix—only the code changes themselves matter. Do not rely on commit dates to determine relevance, as the actual patch may precede or follow the CVE publication by a significant margin. Finally, be cautious of version bump or release-tag commits: these may indicate when a fix was included but often do not contain the fix themselves. Your analysis should focus strictly on code-level changes that directly and verifiably address the vulnerability. 
+
+  ---
+
+  ## Final Answer
+
+  When you have completed your analysis, please provide your answer in the following format:
+  <code>
+  result = {
+      "explanation": "Detailed justification including the key evidence you used."
+      "confidence": 1 to 5,     # How probable this commit is a patch (see scale below)
+      "answer": True or False,  # Is this commit a patch for the CVE?
+  }
+  final_answer(result)
+  </code>
+
+  - The answer should be `True` if the commit is a valid patch for the CVE, and `False` otherwise.
+  - The confidence is an integer score from 1 (lowest) to 5 (highest) based on how strongly the evidence supports your conclusion of the commit being a valid CVE patch. See the confidence scale below for guidance.
+  - The explanation should clearly explain your reasoning process, mentioning key findings such as how the changes address the CVE's root cause, symptoms, affected components, or entry points.
+
+  ### Confidence Scale
+
+  - 1 = No confidence (little or unclear evidence)
+  - 2 = Low confidence (some clues, major gaps)
+  - 3 = Moderate confidence (likely correct, but nontrivial uncertainty)
+  - 4 = High confidence (strong supporting evidence, small doubts)
+  - 5 = Full confidence (clear and comprehensive verification)
