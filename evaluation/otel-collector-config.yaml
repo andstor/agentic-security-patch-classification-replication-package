@@ -1,0 +1,27 @@
+# Learn more about the OpenTelemetry Collector via
+# https://opentelemetry.io/docs/collector/
+
+# docker run  -v "$(pwd)/file-exporter:/file-exporter:rw" -v "$(pwd)/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml" otel/opentelemetry-collector-contrib:latest
+
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: ${GRPC_FILE_EXPORTER_ENDPOINT}
+      http:
+        endpoint: ${HTTP_FILE_EXPORTER_ENDPOINT}
+
+exporters:
+  file:
+    path: /data/*_traces.jsonl
+    append: true
+    group_by:
+        enabled: true
+        resource_attribute: openinference.project.name
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file]
