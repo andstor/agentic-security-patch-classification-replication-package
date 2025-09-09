@@ -401,12 +401,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--train_prob_path',
                         type=str,
-                        default="output/train_prob.csv",
+                        default="../../data/baselines/VulFixMiner/train_prob.csv",
                         help='')
 
     parser.add_argument('--test_prob_path',
                         type=str,
-                        default="output/test_prob.csv",
+                        default="../../data/baselines/VulFixMiner/test_prob.csv",
                         help='')
    
     args = parser.parse_args()
