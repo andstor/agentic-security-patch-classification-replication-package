@@ -1,3 +1,4 @@
+import re
 from datasets import load_dataset
 from utils import process_patch
 from openai import OpenAI
@@ -187,7 +188,12 @@ def main(args):
                     
                     analysis = vulnerability_fix = error = None
                     try:
-                        cavfd = json.loads(result["cavfd"])
+                        m = re.search(r'(\{.*\})', result["cavfd"], re.DOTALL)
+                        if not m:
+                            raise ValueError("No JSON object found in string")
+                        json_text = m.group(1)
+
+                        cavfd = json.loads(json_text)
                         analysis = cavfd.get("analysis")
                         vulnerability_fix = cavfd.get("vulnerability_fix")
                     except json.JSONDecodeError as e:

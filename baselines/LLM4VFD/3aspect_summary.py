@@ -35,7 +35,6 @@ def process_example(args_tuple):
         return None
 
 def main(args):
-    cve_ds = load_dataset("fals3/cvevc_cve")
     patches_ds = load_dataset("fals3/cvevc_commits", "patches")
     mappings_ds = load_dataset("fals3/cvevc_cve_commit_mappings")
     mappings_ds = mappings_ds.filter(lambda x: x["label"] == 1, num_proc=10) # keep only positive samples

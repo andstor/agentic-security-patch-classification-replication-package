@@ -13,8 +13,8 @@ def process_example(args_tuple):
     cve, commit_id, desc, three_aspect_summary, args = args_tuple
 
     client = OpenAI(
-            api_key=args.openai_api_key,
-            base_url=args.openai_api_endpoint,
+            api_key=args.openai_embedding_api_key,
+            base_url=args.openai_embedding_api_endpoint,
         )
     try:
         response = client.embeddings.create(
@@ -88,8 +88,8 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description="Compute lexical similarity for CVE-commit dataset.")
     parser.add_argument("--input_dir", type=str, default='../../data/baselines/LLM4VFD/3aspect_summaries', help="Input directory for lexical similarity CSVs")
-    parser.add_argument("--openai-api-endpoint", type=str, default="http://localhost:8000/v1", help="OpenAI API compatible endpoint to embeddings model")
-    parser.add_argument("--openai-api-key", type=str, default="", help="OpenAI API key for embeddings model")
+    parser.add_argument("--openai-embedding-api-endpoint", type=str, default="http://localhost:8000/v1", help="OpenAI API compatible endpoint to embeddings model")
+    parser.add_argument("--openai-embedding-api-key", type=str, default="", help="OpenAI API key for embeddings model")
     parser.add_argument("--model", type=str, default="Qwen/Qwen3-235B-A22B-Instruct-2507", help="Model that was used for inference")
     parser.add_argument("--embedding-model", type=str, default="Qwen/Qwen3-Embedding-8B", help="Model to use for embeddings")
     parser.add_argument("--num-threads", type=int, default=4, help="Number of threads for concurrent processing")
