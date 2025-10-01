@@ -12,7 +12,7 @@ LANGUAGE_SOURCES = [
     'vendor/tree-sitter-c',
     'vendor/tree-sitter-cpp',
     'vendor/tree-sitter-python',
-    'vendor/tree-sitter-php',
+    'vendor/tree-sitter-php/php',
     'vendor/tree-sitter-java',
     'vendor/tree-sitter-go',
 ]

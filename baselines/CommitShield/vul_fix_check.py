@@ -982,7 +982,7 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description="Compute lexical similarity for CVE-commit dataset.")
 
-    parser.add_argument("--output_dir", type=str, default='../../data/baselines/CommitShield/output', help="Output directory for lexical similarity CSVs")
+    parser.add_argument("--output-dir", type=str, default='../../data/baselines/CommitShield/output', help="Output directory for lexical similarity CSVs")
     parser.add_argument("--subset", type=str, default="PatchFinder_top10", help="Subset of the dataset to use")
     parser.add_argument("--token", type=str, default="", help="GitHub token for accessing private repositories")
     parser.add_argument("--openai-api-endpoint", type=str, default="http://localhost:8000/v1", help="OpenAI API compatible endpoint to generative model")
