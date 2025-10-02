@@ -919,6 +919,9 @@ def main(args):
     # Prepare a lookup for cve descriptions
     cve_index = {key: idx for idx, key in tqdm(enumerate(cve_ds["cve"]), total=len(cve_ds["cve"]), desc=f"Indexing CVEs")}
 
+    os.makedirs(args.local_dir + "/repos", exist_ok=True)
+    os.makedirs(args.local_dir + "/calls", exist_ok=True)
+    os.makedirs(args.local_dir + "/result", exist_ok=True)
     
     output_file = os.path.join(args.output_dir, f"{args.subset}_{model_name}.jsonl")
     if os.path.exists(output_file):
