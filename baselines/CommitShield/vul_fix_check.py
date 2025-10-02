@@ -529,11 +529,11 @@ def delete_folder_if_smaller_than_1gb(folder_path):
 
 
 
-def repo_size(url):
+def repo_size(url, args):
     parsed_url = urlparse(url)
     path_parts = parsed_url.path.strip("/").split("/")
     repo_name = path_parts[1]
-    path = 'repos/' + repo_name
+    path = args.local_dir + '/repos/' + repo_name
     if os.path.exists(path):
         delete_folder_if_smaller_than_1gb(path)
 
@@ -563,7 +563,7 @@ import io.shiftleft.semanticcpg.language._
 import java.io.File
 import java.io.PrintWriter
 
-importCode(inputPath="repos/{repo}", projectName="{repo}")
+importCode(inputPath="{local_dir}/repos/{repo}", projectName="{repo}")
    
 val calls = cpg.call("{func}")
 val file_call = calls.method.file.toJsonPretty
@@ -581,7 +581,7 @@ writer1.close()
     with open(query_path, 'w') as file:
         file.write(text)
     joern_cli_path = "joern"
-    cpg_file_path = "repos/{repo}/cpg.bin".format(repo = rep)
+    cpg_file_path = args.local_dir + "/repos/{repo}/cpg.bin".format(repo = rep)
     joern_script_path = query_path
     success = joern_analyze_code( joern_cli_path, cpg_file_path, joern_script_path)
     return success
@@ -651,7 +651,7 @@ def patch_context(f_file, f_line, function, repo):
     return context
 """
 
-def patch_context(f_file, f_line, function, repo, before=3, after=10):
+def patch_context(f_file, f_line, function, repo, args, before=3, after=10):
     with open(f_file, 'r') as f1:
         files = [file['name'] for file in json.load(f1)]
     with open(f_line, 'r') as f2:
@@ -660,7 +660,7 @@ def patch_context(f_file, f_line, function, repo, before=3, after=10):
     context = []
 
     for file_path, line_number in zip(files, lines):
-        full_path = os.path.join('repos', repo, file_path)
+        full_path = os.path.join(args.local_dir, 'repos', repo, file_path)
         func_code, func_name = get_func(full_path, line_number)
         if func_code != "NULL":
             code_lines = func_code.split("\n")
@@ -807,7 +807,7 @@ def all_process(repo_url, args):
                         if success == 1:
                             f_file = args.local_dir + '/calls/'+ name + '_file_output.json'
                             f_line = args.local_dir + '/calls/'+ name + '_func_output.json'
-                            context[name] = patch_context(f_file, f_line, name, rep.REPO)
+                            context[name] = patch_context(f_file, f_line, name, rep.REPO, args)
 
                         elif success == 0:
                             context[name] = 'NULL'
@@ -866,7 +866,7 @@ def all_process(repo_url, args):
                     if success == 1:
                         f_file = args.local_dir + '/calls/'+ name + '_file_output.json'
                         f_line = args.local_dir + '/calls/'+ name + '_func_output.json'
-                        context[name] = patch_context(f_file, f_line, name, rep.REPO)
+                        context[name] = patch_context(f_file, f_line, name, rep.REPO, args)
                         context_tokens = context_tokens + 0.3 * len(context[name])
                     elif success == 0:
                         context[name] = 'NULL'
