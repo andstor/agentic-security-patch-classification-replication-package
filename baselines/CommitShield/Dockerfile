@@ -3,6 +3,20 @@ FROM python:3.12
 
 ENV PYTHONUNBUFFERED=1
 
+
+# Set working directory for project
+WORKDIR /workspace/
+
+# Copy project files
+COPY vul_fix_check.py ./vul_fix_check.py
+COPY utils.py ./utils.py
+COPY vendor ./vendor
+
+
+# ls current directory and vendor directory and vendor/tree-sitter-cpp to verify files are copied
+RUN ls -la /workspace/vendor
+RUN ls -la /workspace/vendor/tree-sitter-cpp    
+
 # Install system dependencies: JDK 21, git, curl, gcc/g++, bash, php, wget, unzip
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y openjdk-21-jdk git curl gcc g++ bash php wget unzip libnss3 libncurses6 && \
@@ -21,10 +35,3 @@ RUN wget https://github.com/joernio/joern/releases/download/v4.0.426/joern-insta
     ./joern-install.sh --dest /usr/local/bin && \
     rm joern-install.sh
 
-# Set working directory for project
-WORKDIR /workspace/
-
-# Copy project files
-COPY vul_fix_check.py ./vul_fix_check.py
-COPY utils.py ./utils.py
-COPY vendor ./vendor
