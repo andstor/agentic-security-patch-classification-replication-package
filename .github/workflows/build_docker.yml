@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: comitshield
+          - name: commitshield
             build-dir: baselines/CommitShield
 
     env:
