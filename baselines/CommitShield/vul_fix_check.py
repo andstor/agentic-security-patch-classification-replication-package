@@ -63,7 +63,7 @@ def get_commit_information(repo_url, rep, args):
         print("Failed to get commit information:", response.status_code)
         return 0
 
-def patch_classify(commit_infor, args):
+def patch_classify(commit_infor, usage, args):
     file_numbers = len(commit_infor['files'])
     if file_numbers == 1:
         classify_flag = 1
@@ -85,7 +85,7 @@ def patch_classify(commit_infor, args):
         new_patches = []
         for i in range(len(commit_infor['files'])):
             patch = commit_infor['files'][i]
-            judge = LLM_relevant(commit_infor['message'], patch, args)
+            judge = LLM_relevant(commit_infor['message'], patch, usage, args)
             if judge == 1:
                 new_patches.append(commit_infor['files'][i])
                 patch_num = patch_num + 1
@@ -183,7 +183,7 @@ def get_comment(comment_url, args):
         comment_description = 'NULL'
         return comment_description
 
-def LLM_describe(description, args):
+def LLM_describe(description, usage, args):
     basic = description['basic']
     issue = description['issue']
     pr = description['pr']
@@ -212,9 +212,11 @@ def LLM_describe(description, args):
         temperature=0.7,
         stream=False,
     )
+    usage["input_tokens"] += response.usage.completion_tokens
+    usage["output_tokens"] += response.usage.prompt_tokens
     return response.choices[0].message.content
 
-def LLM_relevant(message, patch, args):
+def LLM_relevant(message, patch, usage, args):
     client = OpenAI(
         api_key=args.openai_api_key,
         base_url=args.openai_api_endpoint,
@@ -254,9 +256,11 @@ def LLM_relevant(message, patch, args):
     json_text = m.group(1)
     # help escape double quotes
     data_json = json.loads(json_text)
+    usage["input_tokens"] += response.usage.completion_tokens
+    usage["output_tokens"] += response.usage.prompt_tokens
     return data_json['answer']
 
-def LLM_step2(patch, args):
+def LLM_step2(patch, usage, args):
     client = OpenAI(
         api_key=args.openai_api_key,
         base_url=args.openai_api_endpoint,
@@ -291,9 +295,12 @@ def LLM_step2(patch, args):
         raise ValueError("No JSON object found in string")
     json_text = m.group(1)
     data_json = json.loads(json_text)
+    
+    usage["input_tokens"] += response.usage.completion_tokens
+    usage["output_tokens"] += response.usage.prompt_tokens
     return data_json['answer']
 
-def LLM_impact(message, patch, func, args):
+def LLM_impact(message, patch, func, usage, args):
     client = OpenAI(
         api_key=args.openai_api_key,
         base_url=args.openai_api_endpoint,
@@ -329,9 +336,11 @@ def LLM_impact(message, patch, func, args):
         raise ValueError("No JSON object found in string")
     json_text = m.group(1)
     data_json = json.loads(json_text)
+    usage["input_tokens"] += response.usage.completion_tokens
+    usage["output_tokens"] += response.usage.prompt_tokens
     return data_json
 
-def LLM_analyze(description_pro, patch, patch_context, args):
+def LLM_analyze(description_pro, patch, patch_context, usage, args):
     client = OpenAI(
         api_key=args.openai_api_key,
         base_url=args.openai_api_endpoint,
@@ -372,9 +381,11 @@ def LLM_analyze(description_pro, patch, patch_context, args):
         raise ValueError("No JSON object found in string")
     json_text = m.group(1)
     data_json = json.loads(json_text)
+    usage["input_tokens"] += response.usage.completion_tokens
+    usage["output_tokens"] += response.usage.prompt_tokens
     return data_json
 
-def LLM_analyze_without_joern(description_pro, patch, function, args):
+def LLM_analyze_without_joern(description_pro, patch, function, usage, args):
     client = OpenAI(
         api_key=args.openai_api_key,
         base_url=args.openai_api_endpoint,
@@ -411,11 +422,13 @@ def LLM_analyze_without_joern(description_pro, patch, function, args):
         raise ValueError("No JSON object found in string")
     json_text = m.group(1)
     data_json = json.loads(json_text)
+    usage["input_tokens"] += response.usage.completion_tokens
+    usage["output_tokens"] += response.usage.prompt_tokens
     return data_json
 
 
 # Disabled issue, pr, comment!!!!!!!
-def description_update(commit_infor, rep, args):
+def description_update(commit_infor, rep, usage, args):
     description = {}
     description['basic'] = commit_infor['message']
     issue_descrption = 'NULL'#get_issues(description['basic'], rep, args)
@@ -425,7 +438,7 @@ def description_update(commit_infor, rep, args):
     comment_url = commit_infor['comments_url']
     comment_descrption = 'NULL'#get_comment(comment_url, args)
     description['comment'] = comment_descrption
-    description_pro = LLM_describe(description, args)
+    description_pro = LLM_describe(description, usage, args)
     return description_pro
 
 def get_line(patch):
@@ -682,13 +695,14 @@ def count_tokens(source_code):
     return token_count 
 
 def all_process(repo_url, args):
+    usage = {"input_tokens":0, "output_tokens":0}
     api_url, rep = get_commit_link(repo_url)
     commit = get_commit_information(api_url, rep, args)
-    description_pro = description_update(commit, rep, args)
+    description_pro = description_update(commit, rep, usage, args)
     if len(commit['files']) > 1:
         flag = 2
 
-        flag, new_patches = patch_classify(commit, args)
+        flag, new_patches = patch_classify(commit, usage, args)
         if flag == 0:
             print("----None!!!")
         elif flag == 1:
@@ -741,11 +755,11 @@ def all_process(repo_url, args):
                         
                         tokens = func_tokens + patch_tokens
                         if tokens < 100000:
-                            answer = LLM_impact(description_pro, patch_infor['patch'], patch_infor['funcs'], args)
+                            answer = LLM_impact(description_pro, patch_infor['patch'], patch_infor['funcs'], usage, args)
                             impact_answer.append(answer)
                         elif tokens > 100000:
                             patch_infor['funcs'] = ''
-                            answer = LLM_impact(description_pro, patch_infor['patch'], patch_infor['funcs'], args)
+                            answer = LLM_impact(description_pro, patch_infor['patch'], patch_infor['funcs'], usage, args)
                             impact_answer.append(answer)
 
     if len(impact_answer) > 0:
@@ -779,12 +793,12 @@ def all_process(repo_url, args):
                         func_tokens = func_tokens + func_token
             tokens = patch_tokens + func_tokens
             if tokens < 100000:
-                analyze_answer = LLM_analyze_without_joern(description_pro, patch_new, functions, args)
+                analyze_answer = LLM_analyze_without_joern(description_pro, patch_new, functions, usage, args)
                 
             else:
                 functions = ''
-                analyze_answer = LLM_analyze_without_joern(description_pro, patch_new, functions, args)
-                
+                analyze_answer = LLM_analyze_without_joern(description_pro, patch_new, functions, usage, args)
+
             return analyze_answer
         if flag_impact == 0:
             git_url = url_change(repo_url)
@@ -817,11 +831,11 @@ def all_process(repo_url, args):
                     context_tokens = context_tokens + 0.3 * len(context[name])
                 tokens = patch_tokens + context_tokens
                 if tokens < 100000:
-                    analyze_answer = LLM_analyze(description_pro, patch_new, context, args)
+                    analyze_answer = LLM_analyze(description_pro, patch_new, context, usage, args)
                     return analyze_answer
                 else:
                     context = ''
-                    analyze_answer = LLM_analyze(description_pro, patch_new, context, args)
+                    analyze_answer = LLM_analyze(description_pro, patch_new, context, usage, args)
                     return analyze_answer
 
             elif size == 0:
@@ -975,6 +989,8 @@ def main(args):
                 }
             }) + "\n")
             f.flush()
+            
+        repo_size(url)
     
     
 

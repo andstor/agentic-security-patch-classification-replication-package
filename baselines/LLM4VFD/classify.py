@@ -34,11 +34,13 @@ def process_cci(args_tuple):
             ],
         )
         summary = response.choices[0].message.content
+        usage = {"input_tokens": response.usage.completion_tokens, "output_tokens": response.usage.prompt_tokens}
         return {
             "cve": cve,
             "commit_id": commit_id,
             "diff": diff,
-            "three_aspect_summary": summary
+            "three_aspect_summary": summary,
+            "usage": usage
         }
     except Exception as e:
         return None
@@ -47,7 +49,7 @@ def process_cci(args_tuple):
 def process_embedding(args_tuple):
     """Worker function to process a single example"""
 
-    cve, commit_id, diff, three_aspect_summary, args = args_tuple
+    cve, commit_id, diff, three_aspect_summary, usage, args = args_tuple
 
     client = OpenAI(
             api_key=args.openai_embedding_api_key,
@@ -60,13 +62,14 @@ def process_embedding(args_tuple):
             model=args.embedding_model,
         )
         embedding = response.data[0].embedding
-        
+        usage["embedding_tokens"] = response.usage.prompt_tokens
         return {
             "cve": cve,
             "commit_id": commit_id,
             "diff": diff,
             "three_aspect_summary": three_aspect_summary,
-            "three_aspect_summary_embedding": embedding
+            "three_aspect_summary_embedding": embedding,
+            "usage": usage
         }
     except Exception as e:
         return None
@@ -74,7 +77,7 @@ def process_embedding(args_tuple):
 def process_cavfd(args_tuple):
     """Worker function to process a single example"""
     
-    cve, commit_id, diff, cci, history_cci, history_cve_description, args = args_tuple
+    cve, commit_id, diff, cci, history_cci, history_cve_description, usage, args = args_tuple
     
     client = OpenAI(
             api_key=args.openai_api_key,
@@ -91,10 +94,13 @@ def process_cavfd(args_tuple):
             ],
         )
         cavfd = response.choices[0].message.content
+        usage["input_tokens"] += response.usage.prompt_tokens
+        usage["output_tokens"] += response.usage.completion_tokens
         return {
             "cve": cve,
             "commit_id": commit_id,
             "cavfd": cavfd,
+            "usage": usage
         }
     
     except Exception:
@@ -145,7 +151,7 @@ def main(args):
         for data in cci_data:
             if data is None:
                 continue
-            yield (data["cve"], data["commit_id"], data["diff"], data["three_aspect_summary"], args)
+            yield (data["cve"], data["commit_id"], data["diff"], data["three_aspect_summary"], data["usage"], args)
 
     def task_rag_args_gen(embedding_data):
         for data in embedding_data:
@@ -165,7 +171,7 @@ def main(args):
             except KeyError:
                 continue
 
-            yield (data["cve"], data["commit_id"], data["diff"], cci, history_cci, history_cve_description, args)
+            yield (data["cve"], data["commit_id"], data["diff"], cci, history_cci, history_cve_description, data["usage"], args)
     
 
     with ThreadPool(args.num_threads) as pool, ThreadPool(args.num_threads) as pool2, ThreadPool(args.num_threads) as pool3:
@@ -218,7 +224,8 @@ def main(args):
                         "metadata": {
                             "description": args.subset,
                             "model": args.model,
-                            "embedding_model": args.embedding_model
+                            "embedding_model": args.embedding_model,
+                            "usage": result["usage"]
                         }
                     }) + "\n")
                     f.flush()
@@ -228,7 +235,7 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description="Compute lexical similarity for CVE-commit dataset.")
     #dataset and split args
-    parser.add_argument("--output_dir", type=str, default='../../data/baselines/LLM4VFD/output', help="Output directory for lexical similarity CSVs")
+    parser.add_argument("--output-dir", type=str, default='../../data/baselines/LLM4VFD/output', help="Output directory for lexical similarity CSVs")
     parser.add_argument("--subset", type=str, default="PatchFinder_top10", help="Subset of the dataset to use")
     parser.add_argument("--openai-api-endpoint", type=str, default="http://localhost:8000/v1", help="OpenAI API compatible endpoint to embeddings model")
     parser.add_argument("--openai-api-key", type=str, default="", help="OpenAI API key for embeddings model")
