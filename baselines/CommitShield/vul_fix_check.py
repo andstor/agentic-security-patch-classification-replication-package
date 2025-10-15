@@ -694,8 +694,7 @@ def count_tokens(source_code):
         token_count += 1
     return token_count 
 
-def all_process(repo_url, args):
-    usage = {"input_tokens":0, "output_tokens":0}
+def all_process(repo_url, usage, args):
     api_url, rep = get_commit_link(repo_url)
     commit = get_commit_information(api_url, rep, args)
     description_pro = description_update(commit, rep, usage, args)
@@ -960,7 +959,8 @@ def main(args):
             continue
         
         try:
-            all_results = all_process(url, args)
+            usage = {"input_tokens":0, "output_tokens":0}
+            all_results = all_process(url, usage, args)
             analysis = all_results['analyze']
             vulnerability_fix = all_results['answer']
         except Exception as e:
@@ -986,6 +986,7 @@ def main(args):
                 "metadata": {
                     "description": args.subset,
                     "model": args.model,
+                    "usage": usage,
                 }
             }) + "\n")
             f.flush()
