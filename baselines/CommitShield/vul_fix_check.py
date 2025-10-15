@@ -991,7 +991,7 @@ def main(args):
             }) + "\n")
             f.flush()
             
-        repo_size(url)
+        repo_size(url, args)
     
     
 
