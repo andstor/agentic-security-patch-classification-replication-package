@@ -991,9 +991,8 @@ def main(args):
             }) + "\n")
             f.flush()
             
-        repo_size(url, args)
-    
-    
+        if args.low_space:
+            repo_size(url, args)
 
 
 
@@ -1009,6 +1008,7 @@ def parse_args():
     parser.add_argument("--openai-api-key", type=str, default="", help="OpenAI API key for generative model")
     parser.add_argument("--model", type=str, default="Qwen/Qwen3-235B-A22B-Instruct-2507", help="Model that is used for inference")
     parser.add_argument("--local-dir", type=str, default="./tmp", help="Local directory for storing temporary files")
+    parser.add_argument("--low-space", action="store_true", help="If set, will delete cloned repositories smaller than 1GB to save space")
     return parser.parse_args()
 
 
