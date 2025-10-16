@@ -887,11 +887,11 @@ def all_process(repo_url, usage, args):
                     context[name] = 'NULL'
             tokens = patch_tokens + context_tokens
             if tokens < 100000:
-                analyze_answer = LLM_analyze(description_pro, patch_new, context, args)
+                analyze_answer = LLM_analyze(description_pro, patch_new, context, usage, args)
                 return analyze_answer
             else:
                 context = ''
-                analyze_answer = LLM_analyze(description_pro, patch_new, context, args)
+                analyze_answer = LLM_analyze(description_pro, patch_new, context, usage, args)
                 return analyze_answer
         elif size == 0:
             functions = []
@@ -903,10 +903,10 @@ def all_process(repo_url, usage, args):
                             func_token = 0.3 * len(patch_func[i]['funcs'][j])
                             func_tokens = func_tokens + func_token
             if func_tokens < 100000:
-                analyze_answer = LLM_analyze_without_joern(description_pro, patch_new, functions, args)
+                analyze_answer = LLM_analyze_without_joern(description_pro, patch_new, functions, usage, args)
             else:
                 functions = ''
-                analyze_answer = LLM_analyze_without_joern(description_pro, patch_new, functions, args)
+                analyze_answer = LLM_analyze_without_joern(description_pro, patch_new, functions, usage, args)
             return analyze_answer
     
 
