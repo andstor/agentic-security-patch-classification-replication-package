@@ -34,7 +34,7 @@ def process_cci(args_tuple):
             ],
         )
         summary = response.choices[0].message.content
-        usage = {"input_tokens": response.usage.completion_tokens, "output_tokens": response.usage.prompt_tokens}
+        usage = {"input_tokens": response.usage.prompt_tokens, "output_tokens": response.usage.completion_tokens}
         return {
             "cve": cve,
             "commit_id": commit_id,

@@ -212,8 +212,8 @@ def LLM_describe(description, usage, args):
         temperature=0.7,
         stream=False,
     )
-    usage["input_tokens"] += response.usage.completion_tokens
-    usage["output_tokens"] += response.usage.prompt_tokens
+    usage["input_tokens"] += response.usage.prompt_tokens
+    usage["output_tokens"] += response.usage.completion_tokens
     return response.choices[0].message.content
 
 def LLM_relevant(message, patch, usage, args):
@@ -256,8 +256,8 @@ def LLM_relevant(message, patch, usage, args):
     json_text = m.group(1)
     # help escape double quotes
     data_json = json.loads(json_text)
-    usage["input_tokens"] += response.usage.completion_tokens
-    usage["output_tokens"] += response.usage.prompt_tokens
+    usage["input_tokens"] += response.usage.prompt_tokens
+    usage["output_tokens"] += response.usage.completion_tokens
     return data_json['answer']
 
 def LLM_step2(patch, usage, args):
@@ -295,9 +295,9 @@ def LLM_step2(patch, usage, args):
         raise ValueError("No JSON object found in string")
     json_text = m.group(1)
     data_json = json.loads(json_text)
-    
-    usage["input_tokens"] += response.usage.completion_tokens
-    usage["output_tokens"] += response.usage.prompt_tokens
+
+    usage["input_tokens"] += response.usage.prompt_tokens
+    usage["output_tokens"] += response.usage.completion_tokens
     return data_json['answer']
 
 def LLM_impact(message, patch, func, usage, args):
@@ -336,8 +336,8 @@ def LLM_impact(message, patch, func, usage, args):
         raise ValueError("No JSON object found in string")
     json_text = m.group(1)
     data_json = json.loads(json_text)
-    usage["input_tokens"] += response.usage.completion_tokens
-    usage["output_tokens"] += response.usage.prompt_tokens
+    usage["input_tokens"] += response.usage.prompt_tokens
+    usage["output_tokens"] += response.usage.completion_tokens
     return data_json
 
 def LLM_analyze(description_pro, patch, patch_context, usage, args):
@@ -381,8 +381,8 @@ def LLM_analyze(description_pro, patch, patch_context, usage, args):
         raise ValueError("No JSON object found in string")
     json_text = m.group(1)
     data_json = json.loads(json_text)
-    usage["input_tokens"] += response.usage.completion_tokens
-    usage["output_tokens"] += response.usage.prompt_tokens
+    usage["input_tokens"] += response.usage.prompt_tokens
+    usage["output_tokens"] += response.usage.completion_tokens
     return data_json
 
 def LLM_analyze_without_joern(description_pro, patch, function, usage, args):
@@ -422,8 +422,8 @@ def LLM_analyze_without_joern(description_pro, patch, function, usage, args):
         raise ValueError("No JSON object found in string")
     json_text = m.group(1)
     data_json = json.loads(json_text)
-    usage["input_tokens"] += response.usage.completion_tokens
-    usage["output_tokens"] += response.usage.prompt_tokens
+    usage["input_tokens"] += response.usage.prompt_tokens
+    usage["output_tokens"] += response.usage.completion_tokens
     return data_json
 
 
