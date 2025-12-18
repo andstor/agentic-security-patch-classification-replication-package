@@ -14,6 +14,7 @@ LANGUAGE_SOURCES = [
     'vendor/tree-sitter-python',
     'vendor/tree-sitter-php/php',
     'vendor/tree-sitter-java',
+    'vendor/tree-sitter-javascript',
     'vendor/tree-sitter-go',
 ]
 
@@ -31,6 +32,7 @@ LANGUAGES = {
     "python": Language('build/my-languages.so', 'python'),
     "php": Language('build/my-languages.so', 'php'),
     "java": Language('build/my-languages.so', 'java'),
+    "javascript": Language('build/my-languages.so', 'javascript'),
     "go": Language('build/my-languages.so', 'go'),
 }
 
@@ -56,6 +58,10 @@ FUNC_RULES = {
         "nodes": ["method_declaration"],
         "identifier": ["identifier"],
     },
+    "javascript": {
+        "nodes": ["function_declaration"],
+        "identifier": ["identifier"],
+    },
     "go": {
         "nodes": ["function_declaration"],
         "identifier": ["identifier"],
@@ -72,6 +78,7 @@ EXT_TO_LANG = {
     "py": "python",
     "php": "php",
     "java": "java",
+    "js": "javascript",
     "go": "go",
 }
 
