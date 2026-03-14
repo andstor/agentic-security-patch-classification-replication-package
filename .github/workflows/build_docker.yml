@@ -30,7 +30,7 @@ jobs:
             build-dir: baselines/CommitShield
           - name: favia
             build-dir: evaluation
-            build-context: rootcontext=..
+            build-context: rootcontext=${{ github.workspace }}
 
     env:
       REGISTRY: ghcr.io
