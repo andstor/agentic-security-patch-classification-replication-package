@@ -67,7 +67,7 @@ jobs:
         with:
           context: "${{ matrix.build-dir }}"
           build-contexts:  |
-            rootcontext="{{defaultContext}}"
+            rootcontext="${{ github.workspace }}"
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
