@@ -14,4 +14,5 @@ WORKDIR /workspace/
 
 #COPY  .env ./.env
 COPY  main.py ./main.py
+RUN ls -la && echo "----" && pwd
 COPY  --from=rootcontext ./src ./src
