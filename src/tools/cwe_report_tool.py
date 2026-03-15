@@ -10,11 +10,11 @@ class CWEReportTool(Tool):
             "type": "string",
             "description": "The CWE ID to fetch information for. Example: 79"
         },
-        "view": {
-            "type": "string",
-            "nullable": True,
-            "description": "The view to display the CWE details in. Options: conceptual (default), operational, mapping friendly, complete"
-        }
+        #"view": {
+        #    "type": "string",
+        #    "nullable": True,
+        #    "description": "The view to display the CWE details in. Options: conceptual (default), operational, mapping friendly, complete"
+        #}
     }
     output_type = "string"
 
@@ -23,7 +23,7 @@ class CWEReportTool(Tool):
         self.cache = {}  # In-memory cache
         self.cache_ttl = 3600  # Cache expiration in seconds (1 hour)
 
-    def forward(self, cwe_id: str, view="conceptual"):
+    def forward(self, cwe_id: str):#, view="conceptual"):
         # Check if cached and still valid
         if cwe_id in self.cache:
             cached_report, timestamp = self.cache[cwe_id]
@@ -132,7 +132,7 @@ class CWEReportTool(Tool):
             
         
         markdown_report = f"""
-## CVE Details
+## CWE Details
 {weakness['ID']}: {weakness['Name']}
 Weakness ID: {weakness['ID']}
 Vulnerability Mappping: {mapping_notes}

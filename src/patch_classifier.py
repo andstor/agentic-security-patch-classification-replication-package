@@ -1,3 +1,4 @@
+import re
 import uuid
 from git import Repo
 from smolagents import CodeAgent, LogLevel
@@ -78,7 +79,11 @@ class PatchClassifier():
                 output = result.output
                 if isinstance(output, str):
                     # Parse the answer if it's a string
-                    output = json.loads(output)
+                    m = re.search(r'(\{.*\})', output, re.DOTALL)
+                    if not m:
+                        raise ValueError("No JSON object found in string")
+                    json_text = m.group(1)
+                    output = json.loads(json_text)
                     
                 answer = output.get("answer")
                 explanation = output.get("explanation")
