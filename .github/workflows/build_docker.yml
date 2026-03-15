@@ -30,7 +30,8 @@ jobs:
             build-dir: baselines/CommitShield
           - name: favia
             build-dir: evaluation
-            build-context: "rootcontext=.."
+            build-contexts: |
+              rootcontext=.
 
     env:
       REGISTRY: ghcr.io
@@ -40,7 +41,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
+          #submodules: 'recursive'
           fetch-depth: 0
           fetch-tags: true
           
@@ -66,8 +67,7 @@ jobs:
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
         with:
           context: "${{ matrix.build-dir }}"
-          build-contexts:  |
-            rootcontext="${{ github.workspace }}"
+          build-contexts: "${{ matrix.build-contexts }}"
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
