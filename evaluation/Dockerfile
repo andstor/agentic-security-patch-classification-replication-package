@@ -1,6 +1,8 @@
 # Use python:3.12 as base image
 FROM python:3.12
 
+RUN apt-get update && apt-get install -y vim && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies
 ENV PYTHONUNBUFFERED=1
 RUN pip install --upgrade pip
