@@ -2,6 +2,14 @@ import uuid
 from git import Repo
 import os
 
+
+NON_INTERACTIVE_GIT_ENV = {
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_ASKPASS": "/bin/echo",
+    "SSH_ASKPASS": "/bin/echo",
+    "GCM_INTERACTIVE": "Never",
+}
+
 def clone_repo(repo_url, commit_id, repo_path):
 
     #check if the repo is already cloned
@@ -13,7 +21,8 @@ def clone_repo(repo_url, commit_id, repo_path):
         repo = Repo.init(repo_path)
         repo.create_remote("origin", repo_url)
 
-    repo.git.fetch("--depth", "1", "origin", commit_id)
+    with repo.git.custom_environment(**NON_INTERACTIVE_GIT_ENV):
+        repo.git.fetch("--depth", "1", "origin", commit_id)
     repo.git.checkout("FETCH_HEAD")
     
     return repo
