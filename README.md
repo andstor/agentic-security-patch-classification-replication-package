@@ -1,4 +1,4 @@
-# XXXX 2025 replication package
+# agentic security patch classification replication package
 
 
 ## Repository structure
@@ -62,104 +62,7 @@ Follow the setup instructions within each directory. To replicate the experiment
 12. Analyze the results using the `results.ipynb` notebook in `analysis/`.
 13. Generate the tables by running `tables.ipynb` in `analysis/`.
 
+Due to the variability of deep learning, we provide both the trained models and the generated results. The results are available in the data/ directory. Metadata and links to the trained models can be found at here. Datasets are available at: methods2test_small, methods2test_meta, methods2test_runnable.
 
-git submodule update --init --recursive
-
-
-### Phoenix Server
-
-Run Phoenix server to collect traces:
-```bash
-PHOENIX_WORKING_DIR=phoenix python -m phoenix.server.main serve
-```
-
-
-
-## Requirements
-
-### Dependencies
-Please make sure you have Docker installed on your machine. See the [Docker installation guide](https://docs.docker.com/get-docker/) for more information.
-
-Install the Python dependencies defined in the `requirements.txt`.
-```bash
-pip install -r requirements.txt
-```
-
-
-## Execution
-The runnable methods2test codes are executed using the `evaluate_tests.py` script. This needs to be sandboxed due to potential security issues with executing arbitrary generated code. We use Docker for this purpose. Execute at your own risk.
-
-### Build
-Build the image (/evaluation/methods2test_runnable/Dockerfile) from the current directory:
-
-```bash
-docker build -t cve_agent .
-```
-
-### Usage
-
-> [!CAUTION]
-> Please execute following commands with caution! Generated codes might have unexpected behaviors. Execute at your own risk.
-
-#### Validate Buildable Repos
-
-Start a container using one of the following:
-
-```bash
-docker run \
-  -it \
-  --mount type=bind,source="$(pwd)"/tmp,target=/workspace/tmp \
-  --mount type=bind,source="$(pwd)"/data/output/,target=/workspace/data/output \
-  --mount type=bind,source="$(pwd)"/application.log/,target=/workspace/application.log \
-  cve_agent python -u main.py --cve CVE-2019-6976
-```
-
-
-### Apptainer
-If you want to use Apptainer instead of Docker, we provide pre-built images on GitHub Container Registry. The image is available at `ghcr.io/andstor/peft-unit-test-generation-replication-package/methods2test_runnable:main`.
-
-Because we are executing untrusted code, we recommend using the `--containall` and `--no-home` flags to prevent the container from accessing your home directory and other sensitive files. This will require the use of an overlay file to store intermediate dependencies and results.
-
-You can create an overlay file using the following command:
-
-```bash
-apptainer overlay create --size 10240 overlay.img
-```
-
-For more information on how to use Apptainer, please refer to the [Apptainer documentation](https://apptainer.org/docs/user/latest/).
-
-
-```bash
-apptainer run \
-  --containall \
-  --no-home \
-  --overlay overlay.img \
-  --cwd "/workspace/evaluation/methods2test_runnable/" \
-  --mount type=bind,source="$(pwd)"/.tmp/,target=/workspace/evaluation/methods2test_runnable/tmp \
-  --mount type=bind,source="$(pwd)"/../../data/methods2test_runnable/coverage/,target=/workspace/data/methods2test_runnable/coverage \
-  --mount type=bind,source="$(pwd)"/../../data/methods2test_runnable/fixed/,target=/workspace/data/methods2test_runnable/fixed,readonly \
-  docker://ghcr.io/andstor/peft-unit-test-generation-replication-package/methods2test_runnable:main python -u evaluate_tests.py --num_proc 20
-```
-    
-
-
-
-    21c21e555dedfc2a6e7823625014235186047b6f
-
-    https://github.com/locutusjs/locutus/commit/eb863321990e7e5514aa14f68b8d9978ece9e65e
-    https://github.com/locutusjs/locutus/commit/21c21e555dedfc2a6e7823625014235186047b6f
-
-
-
-
-
-    https://app.phoenix.arize.com/s/andstor/projects
-
-
-
-
-Start the OpenTelemetry Collector with the file exporter and Phoenix exporter:
-
-```bash
-docker compose up
-```
+## Datasets & Resources
+To support reproducibility, all datasets, experiment code, and results are publicly available. The results are available in the data/ directory. The CVEVC datasets include candidates, CVEs, commits, and mappings between CVEs and commits, available at: [cvevc_candidates](https://huggingface.co/datasets/andstor/cvevc_candidates), [cvevc_cve](https://huggingface.co/datasets/andstor/cvevc_cve), [cvevc_commits](https://huggingface.co/datasets/andstor/cvevc_commits), and [cvevc_cve_commit_mappings](https://huggingface.co/datasets/andstor/cvevc_cve_commit_mappings). Experiment trajectories are available at [favia_trajectories](https://huggingface.co/datasets/andstor/favia_trajectories), and interactive traces can be explored through the demo spaces for [Top-10 PatchFinder](https://huggingface.co/spaces/andstor/phoenix-cvevc_candidates_PatchFinder_top10) and [Random 10](https://huggingface.co/spaces/andstor/phoenix-cvevc_candidates_random_10).
