@@ -1,4 +1,4 @@
-# agentic security patch classification replication package
+# Agentic security patch classification replication package
 
 
 ## Repository structure
