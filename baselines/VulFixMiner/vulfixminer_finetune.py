@@ -33,8 +33,8 @@ model_folder_path = os.path.join(directory, 'model')
 
 
 NUMBER_OF_EPOCHS = 15
-TRAIN_BATCH_SIZE = 764#8
-TEST_BATCH_SIZE = 764#32
+TRAIN_BATCH_SIZE = 100#764#8
+TEST_BATCH_SIZE = 100#764#32
 EARLY_STOPPING_ROUND = 5
 
 TRAIN_PARAMS = {'batch_size': TRAIN_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
@@ -44,7 +44,7 @@ LEARNING_RATE = 1e-5
 
 use_cuda = cuda.is_available()
 use_mps = torch.backends.mps.is_available()
-device = torch.device("cuda:0" if use_cuda else "mps" if use_mps else "cpu")
+device = torch.device("cuda" if use_cuda else "mps" if use_mps else "cpu")
 
 random_seed = 109
 torch.manual_seed(random_seed)
@@ -268,10 +268,12 @@ def do_train(args):
             for file_path, file_diff in file_diffs.items():
                 # Keep original metadata for each file diff
                 for key in batch.keys():
-                    exploded_data[key].append(batch[key][i])
+                    if key == "diff": 
+                        exploded_data[key].append("")
+                    else:
+                        exploded_data[key].append(batch[key][i])
                 exploded_data['file_path'].append(file_path)
                 exploded_data['file_diff'].append(file_diff)
-
         
         return exploded_data
 

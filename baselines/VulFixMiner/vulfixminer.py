@@ -35,8 +35,8 @@ model_folder_path = os.path.join(directory, 'model')
 NUMBER_OF_EPOCHS = 60
 EARLY_STOPPING_ROUND = 5
 
-TRAIN_BATCH_SIZE = 1024
-TEST_BATCH_SIZE = 1024
+TRAIN_BATCH_SIZE = 400
+TEST_BATCH_SIZE = 400
 
 TRAIN_PARAMS = {'batch_size': TRAIN_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
 TEST_PARAMS = {'batch_size': TEST_BATCH_SIZE, 'shuffle': True, 'num_workers': 8}
@@ -255,8 +255,8 @@ def do_train(args):
     else:
         code_bert = finetune_model.code_bert
         
-    code_bert.eval()
     code_bert.to(device)
+    code_bert.eval()
 
     print("Finished loading model")
 
@@ -265,7 +265,7 @@ def do_train(args):
     tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
     
     def construct_urls(row):
-        url = row["owner"] + '/' + row["repo"] + '/commit/' + row["commit_id"]
+        url = row["repo"] + '/commit/' + row["commit_id"]
         row["url"] = url
         return row
     
@@ -324,17 +324,23 @@ def do_train(args):
     ds_tokenized = ds_code.map(preprocess_function, batched=False, num_proc=10, desc="Tokenizing")#, remove_columns=ds_code["train"].column_names)
     ds_tokenized = ds_tokenized.with_format("torch")
 
+    
     def get_embeddings(row):
-        with torch.no_grad():
-            inputs = row['input_ids'].to(device)
-            attention = row['attention_mask'].to(device)
-            outputs = code_bert(inputs, attention)
-            embeddings = outputs.last_hidden_state[:, 0, :]
-            #sum_ = torch.sum(embeddings, dim=0)
-            #mean_ = torch.div(sum_, len(row['input_ids']))
-            mean_ = torch.mean(embeddings, dim=0).cpu()
-        
-        row["embedding"] = mean_
+        try:
+            with torch.no_grad():
+                inputs = row['input_ids'].to(device)
+                attention = row['attention_mask'].to(device)
+
+                outputs = code_bert(inputs, attention)
+                embeddings = outputs.last_hidden_state[:, 0, :]
+                mean_ = torch.mean(embeddings, dim=0).cpu()
+
+            row["embedding"] = mean_
+
+        except torch.OutOfMemoryError:
+            print(f"⚠️ Skipping sample (too large): {len(row['input_ids'])} tokens")
+            row = None
+            torch.cuda.empty_cache()  # free up memory to continue
 
         return row
 
@@ -345,6 +351,8 @@ def do_train(args):
         num_proc=1,
         desc="Computing embeddings",
     )
+
+    predictions = predictions.filter(lambda row: row["embedding"] is not None, num_proc=10, batched=False)
     #ds_predictions = predictions.remove_columns(["input_ids", "attention_mask", "code"])
     #ds_predictions = ds_predictions.rename_columns({"embeddings": "input_ids"})
     
