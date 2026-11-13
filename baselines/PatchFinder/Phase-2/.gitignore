@@ -1,7 +1,0 @@
-*.csv
-*.pt
-*.pth
-__pycache__/
-.vscode/
-*.out
-*.pth
