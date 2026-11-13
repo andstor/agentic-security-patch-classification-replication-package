@@ -4,6 +4,7 @@ pytorch_lightning
 transformers
 wandb
 tensorboard
+nltk
 scikit-learn
 
 torch>=1.0.0

@@ -1,5 +1,8 @@
 # PatchFinder
 
+https://github.com/MarkLee131/PatchFinder
+55832ed160da8b46b6a077ceb8df91451740a674
+
 As introduced in the paper, PatchFinder involves two phases:
 
 - Initial retrieval of candidate patches: This phase employs a hybrid approach to retrieve candidate patches at the lexical level and the semantic level.
@@ -11,6 +14,3 @@ Based on the retrieving results from the two diomenstions, we can fuze the resul
 
 - Re-ranking via fine-tuning: We fine-tune CodeReviewer to re-rank the top-100 candidate patches. You can refer to the code within [Phase-2](./Phase-2) to reuse the code for fine-tuning.
 
-
-
-55832ed160da8b46b6a077ceb8df91451740a674
